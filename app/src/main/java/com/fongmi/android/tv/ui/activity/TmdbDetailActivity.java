@@ -109,6 +109,7 @@ import com.fongmi.android.tv.ui.host.TmdbDetailHost;
 import com.fongmi.android.tv.playback.PlaybackEventCollector;
 import com.fongmi.android.tv.playback.HistoryResumePayload;
 import com.fongmi.android.tv.playback.PlaybackOrientation;
+import com.fongmi.android.tv.playback.SubtitleRestoreCoordinator;
 import com.fongmi.android.tv.player.IntroSkipKinds;
 import com.fongmi.android.tv.player.IntroSkipPlayback;
 import com.fongmi.android.tv.player.PlayerManager;
@@ -4780,9 +4781,12 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             clearDetailEpisodeFocusRowIfNeeded(view);
             return;
         }
-        if (!episodeGridMode) return;
         int position = binding.episodeContainer.getChildAdapterPosition(view);
         if (position == RecyclerView.NO_POSITION) return;
+        if (!episodeGridMode) {
+            alignDetailEpisodeFocusedRow(view, position);
+            return;
+        }
         int rowStart = detailEpisodeRowStart(position);
         boolean sameFocusedRow = rowStart == lastDetailEpisodeFocusRowStart;
         lastDetailEpisodeFocusRowStart = rowStart;
@@ -5088,7 +5092,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         if (visibleHolder != null) {
             binding.episodeContainer.stopScroll();
             visibleHolder.itemView.requestFocus();
-            alignDetailEpisodeFocusedRow(visibleHolder.itemView, target);
+            if (episodeGridMode) alignDetailEpisodeFocusedRow(visibleHolder.itemView, target);
             return true;
         }
         binding.episodeContainer.post(() -> {
@@ -5101,7 +5105,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                     return;
                 }
                 holder.itemView.requestFocus();
-                alignDetailEpisodeFocusedRow(holder.itemView, target);
+                if (episodeGridMode) alignDetailEpisodeFocusedRow(holder.itemView, target);
             }, 80);
         });
         return true;
@@ -5122,12 +5126,32 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private void alignDetailEpisodeFocusedRow(View focusedView, int position) {
         if (binding == null || focusedView == null) return;
         RecyclerView.LayoutManager layoutManager = binding.episodeContainer.getLayoutManager();
+        if (layoutManager instanceof LinearLayoutManager linearLayoutManager
+                && linearLayoutManager.getOrientation() == LinearLayoutManager.HORIZONTAL) {
+            focusedView.post(() -> {
+                if (binding == null || episodeGridMode || getCurrentFocus() != focusedView) return;
+                if (binding.episodeContainer.getChildAdapterPosition(focusedView) != position) return;
+                alignDetailEpisodeFocusedCardHorizontallyNow(focusedView);
+            });
+            return;
+        }
         if (!(layoutManager instanceof GridLayoutManager)) return;
         focusedView.post(() -> {
             if (binding == null || getCurrentFocus() != focusedView) return;
             if (binding.episodeContainer.getChildAdapterPosition(focusedView) != position) return;
             alignDetailEpisodeFocusedCardNow(focusedView);
         });
+    }
+
+    private void alignDetailEpisodeFocusedCardHorizontallyNow(View focusedView) {
+        if (binding == null || binding.episodeContainer.getWidth() <= 0) return;
+        int contentLeft = binding.episodeContainer.getPaddingLeft();
+        int contentRight = binding.episodeContainer.getWidth() - binding.episodeContainer.getPaddingRight();
+        int viewportCenter = contentLeft + (contentRight - contentLeft) / 2;
+        int cardCenter = focusedView.getLeft() + focusedView.getWidth() / 2;
+        int delta = cardCenter - viewportCenter;
+        if (Math.abs(delta) <= ResUtil.dp2px(2)) return;
+        binding.episodeContainer.smoothScrollBy(delta, 0);
     }
 
     private void alignDetailEpisodeFocusedCardNow(View focusedView) {
@@ -7035,6 +7059,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         updateInlineButtons(false);
         Site site = getCurrentSite();
         ensureInlineDanmakuController();
+        if (SubtitleRestoreCoordinator.restore(history, player(), result)) persistHistorySubtitleSource();
         startPlayer(getHistoryKey(), result, useParse, site == null ? 0 : site.getTimeout(), buildMetadata());
         updateNavigationKey();
         subtitlePlaybackSession.onPlaybackStarted(this, result);
@@ -7050,6 +7075,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                 .rawTitle(playbackHistoryName())
                 .rawRemarks(history.getVodRemarks())
                 .episodeName(historyEpisodeTitle(selectedEpisode))
+                .tmdbId(danmakuTmdbId())
+                .tmdbSeasonNumber(danmakuTmdbSeasonNumber())
                 .source(MediaTitleLearningExample.SOURCE_DANMAKU_AUTO)
                 .allowAi(true)
                 .build(), danmaku -> applyInlineDanmaku(result, danmaku));
@@ -7060,6 +7087,18 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         if (DanmakuSetting.isSpiderFirst() && !result.getDanmaku().isEmpty()) player().addDanmaku(danmaku);
         else player().setDanmaku(danmaku);
         refreshInlineDanmakuButtons();
+    }
+
+    private int danmakuTmdbId() {
+        TmdbItem item = matchedTmdbItem;
+        return item == null ? 0 : item.getTmdbId();
+    }
+
+    private int danmakuTmdbSeasonNumber() {
+        TmdbItem item = matchedTmdbItem;
+        if (item == null || !item.isTv()) return 0;
+        TmdbEpisode tmdbEpisode = selectedEpisode == null ? null : selectedEpisode.getTmdbEpisode();
+        return tmdbEpisode == null ? 0 : tmdbEpisode.getSeasonNumber();
     }
 
     private void refreshInlineDanmakuButtons() {
@@ -8557,7 +8596,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private void showInlineDanmaku() {
         if (service() == null || player().isEmpty()) return;
-        DanmakuDialog.create().player(player()).identity(getKeyText(), getIdText(), playbackHistoryName(), selectedEpisode == null ? "" : historyEpisodeTitle(selectedEpisode)).show(this);
+        DanmakuDialog.create().player(player()).identity(getKeyText(), getIdText(), playbackHistoryName(), selectedEpisode == null ? "" : historyEpisodeTitle(selectedEpisode)).tmdb(danmakuTmdbId(), danmakuTmdbSeasonNumber()).show(this);
     }
 
     private void showInlineTitle() {
@@ -10739,6 +10778,25 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private void syncInlineHistory() {
         updateInlineHistoryProgress();
         if (history != null && !Setting.isIncognito()) Task.execute(() -> history.save());
+    }
+
+    @Override
+    protected void onSubtitleSelected(Sub sub) {
+        if (SubtitleRestoreCoordinator.remember(history, sub)) persistHistorySubtitleSource();
+    }
+
+    /**
+     * 落盘字幕来源，不重新采样播放器进度。
+     *
+     * <p>不能用 {@link #syncInlineHistory()}：那个方法会先跑
+     * {@code updateInlineHistoryProgress()} 去读播放器当前位置，而恢复发生在起播之前——
+     * 那时播放器还停在上一集，读到的进度会被记到新集头上。这里只写 history 对象上
+     * 已有的字段快照（进度已由 {@code updateInlineHistory} 按新集重置好）。
+     */
+    private void persistHistorySubtitleSource() {
+        if (history == null || Setting.isIncognito()) return;
+        History snapshot = history.copy();
+        Task.execute(snapshot::save);
     }
 
     private void updateInlineHistoryProgress() {
