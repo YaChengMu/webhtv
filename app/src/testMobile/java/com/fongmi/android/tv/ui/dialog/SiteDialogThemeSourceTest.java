@@ -15,7 +15,7 @@ public class SiteDialogThemeSourceTest {
         String dialog = read("app/src/mobile/java/com/fongmi/android/tv/ui/dialog/SiteDialog.java");
         assertFalse("site selection must not force the static light dialog theme", dialog.contains("ThemeOverlay_WebHTV_LightDialog"));
         assertTrue("site selection should use the theme-aware dialog base", dialog.contains("return builder().setView(getBinding().getRoot());"));
-        assertTrue(dialog.contains("SiteDialogTheme.resolve(binding.getRoot().getContext(), Setting.getDynamicColor())"));
+        assertTrue(dialog.contains("SiteDialogTheme.resolve(binding.getRoot().getContext(), ThemeController.resolve(binding.getRoot().getContext()))"));
         assertTrue(dialog.contains("binding.getRoot().setBackgroundColor(theme.surface())"));
         assertTrue(dialog.contains("binding.keyword.setTextColor(theme.onSurface())"));
         assertTrue(dialog.contains("binding.keyword.setHintTextColor(theme.onSurfaceVariant())"));
@@ -60,13 +60,25 @@ public class SiteDialogThemeSourceTest {
     }
 
     @Test
+    public void leanbackThemeChoicesAreDpadFocusable() throws Exception {
+        String layout = read("app/src/leanback/res/layout/adapter_theme.xml");
+        assertTrue(layout.contains("android:background=\"@drawable/selector_item\""));
+        assertTrue(layout.contains("android:focusable=\"true\""));
+        assertTrue(layout.contains("android:focusableInTouchMode=\"true\""));
+    }
+
+    @Test
     public void everyActivityAppliesThemeChangesImmediately() throws Exception {
-        for (String flavor : new String[]{"mobile", "leanback"}) {
-            String base = read("app/src/" + flavor + "/java/com/fongmi/android/tv/ui/base/BaseActivity.java");
-            assertTrue("theme changes must recreate activities in " + flavor,
-                    base.contains("RefreshEvent.Type.THEME")
-                            && base.contains("recreate()"));
-        }
+        String mobile = read("app/src/mobile/java/com/fongmi/android/tv/ui/base/BaseActivity.java");
+        assertTrue(mobile.contains("event.getType() == RefreshEvent.Type.LANGUAGE"));
+        assertTrue(mobile.contains("event.getType() == RefreshEvent.Type.THEME"));
+        assertTrue(mobile.contains("recreate()"));
+
+        String leanback = read("app/src/leanback/java/com/fongmi/android/tv/ui/base/BaseActivity.java");
+        assertTrue(leanback.contains("event.getType() == RefreshEvent.Type.LANGUAGE"));
+        assertTrue(leanback.contains("event.getType() == RefreshEvent.Type.UI_SCALE"));
+        assertTrue(leanback.contains("event.getType() == RefreshEvent.Type.THEME"));
+        assertTrue(leanback.contains("recreate()"));
     }
 
     private String read(String path) throws Exception {
