@@ -550,7 +550,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         file(activity, path, "");
     }
 
-    private static void file(FragmentActivity activity, String path, String title) {
+    public static void file(FragmentActivity activity, String path, String title) {
         if (TextUtils.isEmpty(path)) return;
         PushParser.Parsed push = PushParser.of("file://" + path, TextUtils.isEmpty(title) ? new File(path).getName() : title);
         start(activity, SiteApi.PUSH, push.getId(), push.getName());
