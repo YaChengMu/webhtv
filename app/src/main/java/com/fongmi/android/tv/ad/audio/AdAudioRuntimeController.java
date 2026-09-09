@@ -65,9 +65,6 @@ public final class AdAudioRuntimeController implements AutoCloseable {
     private boolean speechSuppressed;
     private String lastRefreshLog = "";
     private long activeSessionId = Long.MIN_VALUE;
-    /** 区间反馈单独跟踪 session/generation，避免与音频管线的重建判定耦合。 */
-    private long intervalSessionId = Long.MIN_VALUE;
-    private long intervalGeneration = Long.MIN_VALUE;
     private boolean closed;
 
     public AdAudioRuntimeController(PlaybackMediaSignalHub hub, PlaybackMediaClock clock,
@@ -209,14 +206,12 @@ public final class AdAudioRuntimeController implements AutoCloseable {
         if (coordinator != null) coordinator.close();
         this.ui = ui;
         this.coordinator = new AdSkipCoordinator(playback, ui, 5_000L, diagnostics);
-        resetIntervalBaseline();
         refreshLocked();
     }
 
     public synchronized void unbindUi() {
         if (coordinator != null) coordinator.close();
         coordinator = null;
-        resetIntervalBaseline();
         ui = null;
         deactivateLocked();
     }
@@ -247,39 +242,6 @@ public final class AdAudioRuntimeController implements AutoCloseable {
 
     public synchronized AdAudioRuleSnapshot snapshot() {
         return snapshot;
-    }
-
-    /**
-     * 执行用户框选区间的即时跳过。
-     *
-     * <p>区间反馈不依赖音频指纹功能：即使指纹与语音通道都关闭、没有任何规则，
-     * 用户依然可以框选广告并要求跳过。因此这里在 UI 已绑定但 coordinator
-     * 尚未建立时按需创建一个 —— {@link #bindUi} 只在音频通道启用路径上被调用，
-     * 不能作为区间跳过的前置条件。
-     *
-     * @return 是否真的执行了 seek；未绑定 UI 或校验失败时为 false
-     */
-    public synchronized boolean skipUserInterval(long startMs, long endMs, String feedbackId) {
-        if (closed || ui == null) return false;
-        PlaybackMediaSignalHub.Session session = hub.session();
-        if (coordinator == null) {
-            coordinator = new AdSkipCoordinator(playback, ui, 5_000L, diagnostics);
-        } else if (intervalSessionId != Long.MIN_VALUE
-                && (intervalSessionId != session.id() || intervalGeneration != session.generation())) {
-            // timeline reset 只经 PCM provider 的回调转发给 coordinator。音频通道关闭时
-            // 那条路径不存在，coordinator 会永远卡在上一次跳过留下的 UNDO_WINDOW 上，
-            // 之后每一次区间提交都被拒。这里按播放实际状态主动对齐。
-            // 不复用 activeSessionId：那个字段决定音频管线是否需要重建，
-            // 从这条路径改写它会让 refreshLocked 漏掉一次必要的重建。
-            coordinator.reset(intervalSessionId);
-        }
-        boolean applied = coordinator.onUserInterval(session.id(), session.generation(),
-                startMs, endMs, feedbackId);
-        // seek 会推进 generation，基线取调用后的实际状态
-        PlaybackMediaSignalHub.Session current = hub.session();
-        intervalSessionId = current.id();
-        intervalGeneration = current.generation();
-        return applied;
     }
 
     public synchronized AdSkipPolicyController.Mode skipMode() {
@@ -329,7 +291,6 @@ public final class AdAudioRuntimeController implements AutoCloseable {
         deactivateLocked();
         if (coordinator != null) coordinator.close();
         coordinator = null;
-        resetIntervalBaseline();
         ui = null;
     }
 
@@ -340,15 +301,9 @@ public final class AdAudioRuntimeController implements AutoCloseable {
         deactivateLocked();
         if (coordinator != null) coordinator.close();
         coordinator = null;
-        resetIntervalBaseline();
         ui = null;
         if (workerShutdown != null) workerShutdown.run();
         if (speechWorkerShutdown != null) speechWorkerShutdown.run();
-    }
-
-    private void resetIntervalBaseline() {
-        intervalSessionId = Long.MIN_VALUE;
-        intervalGeneration = Long.MIN_VALUE;
     }
 
     private void loadRulesLocked() {

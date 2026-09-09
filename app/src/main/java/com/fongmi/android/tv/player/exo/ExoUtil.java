@@ -79,6 +79,7 @@ import com.fongmi.android.tv.setting.PlaybackPerformanceCatalog;
 import com.fongmi.android.tv.setting.PlaybackPerformanceSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.subtitle.RealtimeSubtitleBufferSizeProvider;
+import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.crawler.SpiderDebug;
@@ -252,14 +253,7 @@ public class ExoUtil {
         builder.setDrmConfiguration(buildDrmConfig(spec.getDrm()));
         builder.setRequestMetadata(buildRequestMetadata(url, headers));
         builder.setMediaMetadata(spec.getMetadata());
-        // Deliberately false: ad removal for Exo lives in HlsPlaylistCleaningDataSource,
-        // which runs both engines through HlsAdblockPipeline. This flag would make the
-        // fork's HlsPlaylistParser run HlsAdsParser again on the already-cleaned text,
-        // and that heuristic is not independent of what precedes it — its "largest group
-        // exceeds 50%" gate is measured against the segment count, so removing ads can
-        // open a gate that was closed and make it delete main content without bound.
-        // See HlsPlaylistCleaningDataSource's class javadoc for the measured case.
-        builder.setAdblock(false);
+        builder.setAdblock(Setting.isAdblock());
         builder.setMimeType(spec.getFormat());
         builder.setImageDurationMs(15000);
         builder.setMediaId(spec.getKey());

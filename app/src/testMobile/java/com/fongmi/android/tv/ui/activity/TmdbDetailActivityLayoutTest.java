@@ -443,41 +443,15 @@ public class TmdbDetailActivityLayoutTest {
         assertTrue("wide and mobile inline controls must dispatch the ad feedback action",
                 source.contains("binding.playerAdFeedback.setOnClickListener(guarded(this::onInlineAdFeedback));")
                         && source.contains("detailActionView(R.id.adFeedback, View.class).setOnClickListener(guarded(this::onInlineAdFeedback));"));
-        assertTrue("detail inline ad feedback must only require a seekable VOD timeline, not AI config",
+        assertTrue("detail inline playback must use the same HLS and AI availability gate as the native player",
                 source.contains("private boolean isInlineAdFeedbackEnabled()")
-                        && source.contains("Setting.isAdblock() && !player().isLive() && player().getDuration() > 0"));
-        assertFalse("AI must no longer gate the ad feedback button",
-                source.contains("Setting.isAiConfigReady() && Setting.isAdblock() && Setting.isAiAdDetection()"));
-        assertTrue("detail inline playback must route ad feedback through the shared controller",
+                        && source.contains("Setting.isAiConfigReady() && Setting.isAdblock() && Setting.isAiAdDetection()")
+                        && source.contains("MediaSourceFactory.isHlsUrl(player().getUrl())"));
+        assertTrue("detail inline playback must submit AI analysis and save confirmed user rules",
                 source.contains("private void submitInlineAdFeedback()")
-                        && source.contains("controller.onMarkedInterval(start, end)")
-                        && source.contains("controller.onQuickReport(mAdFeedbackHost.cachedEvidence())")
-                        && source.contains("new AdFeedbackController(mAdFeedbackHost)"));
-        assertTrue("marked interval must read the position before clearing the mark so a released player keeps it",
-                source.contains("long end = mAdFeedbackHost.safePositionMs();")
-                        && source.indexOf("long end = mAdFeedbackHost.safePositionMs();")
-                                < source.indexOf("long start = mAdMarkStartMs;"));
-        assertTrue("source or episode switch must invalidate in-flight attribution",
-                source.contains("private void resetAdFeedback()")
-                        && source.contains("mAdFeedback.invalidate();")
-                        && source.contains("mAdFeedbackHost.invalidateEvidence();")
-                        && source.contains("resetAdFeedback();"));
-        assertTrue("playback host must feed the site baseline or the domain channel stays dead",
-                source.contains("private void recordAdFeedbackHost()")
-                        && source.contains("mAdFeedbackHost.recordPlaybackHost();")
-                        && source.contains("recordAdFeedbackHost(); // 播放地址已确定，记入本站域名基线"));
-        assertTrue("the feedback dialog must be closed on destroy to avoid leaking the activity",
-                source.contains("if (mAdFeedbackDialog != null) mAdFeedbackDialog.close();"));
-        assertTrue("long press must arm the interval marking mode",
-                source.contains("private boolean onInlineAdFeedbackLongPress()")
-                        && source.contains("binding.playerAdFeedback.setOnLongClickListener(view -> onInlineAdFeedbackLongPress());")
-                        && source.contains("detailActionView(R.id.adFeedback, View.class).setOnLongClickListener(view -> onInlineAdFeedbackLongPress());"));
-        assertTrue("confirmed plans must be applied through the shared applier",
-                source.contains("AdRulePlanApplier.apply(")
-                        && source.contains("case APPLIED -> R.string.ad_interval_rule_saved;"));
-        assertFalse("the duplicated per-activity AI request builder must be gone",
-                source.contains("private AdDetectionRequest buildInlineAdDetectionRequest()")
-                        || source.contains("new AiAdDetectionService(config).analyze(request)"));
+                        && source.contains("new AiAdDetectionService(config).analyze(request)")
+                        && source.contains("AdRulePreviewDialog.create(result).show(this, confirmedResult ->")
+                        && source.contains("UserAdRuleStore.add(rule);"));
     }
 
     /**

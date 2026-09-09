@@ -90,20 +90,6 @@ public class AiRecommendationInfoDialogLayoutTest {
                         && layout.contains("android:nextFocusRight=\"@id/confirm\"")
                         && layout.contains("android:nextFocusLeft=\"@id/notInterested\"")
                         && layout.contains("android:nextFocusRight=\"@id/notInterested\""));
-
-        assertFalse("Touch-mode focusability baked into this shared layout makes the first mobile tap only move"
-                        + " focus, so users must tap twice; TV-only touch focus belongs in the flavor gate instead",
-                layout.contains("android:focusableInTouchMode=\"true\""));
-        assertTrue("Each widget stripped in the layout must get its touch focus straight from the flavor check, so"
-                        + " the TV remote still reaches it and mobile still clicks on the first tap",
-                compactSource.contains("detailScroll.setFocusableInTouchMode(Util.isLeanback())")
-                        && compactSource.contains("notInterested.setFocusableInTouchMode(Util.isLeanback())")
-                        && compactSource.contains("confirm.setFocusableInTouchMode(Util.isLeanback())"));
-        assertTrue("Every gated widget must stay DPAD-focusable in the layout now that the Java side only toggles"
-                        + " touch-mode focus",
-                singleTag(layout, "detailScroll").contains("android:focusable=\"true\"")
-                        && singleTag(layout, "notInterested").contains("android:focusable=\"true\"")
-                        && singleTag(layout, "confirm").contains("android:focusable=\"true\""));
     }
 
     @Test

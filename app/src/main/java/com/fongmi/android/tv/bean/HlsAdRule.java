@@ -47,35 +47,6 @@ public class HlsAdRule {
         return items == null ? Collections.emptyList() : items;
     }
 
-    /**
-     * 构造一条用户规则。作用域 {@code playlistHostSuffixes} 必填：
-     * {@link #compile()} 会拒绝没有作用域的规则，避免规则跨站点生效。
-     */
-    public static HlsAdRule createUserRule(String id, String name,
-                                           List<String> playlistHostSuffixes,
-                                           List<String> hostSuffixes,
-                                           List<String> segmentUrlRegex,
-                                           Double minDuration, Double maxDuration,
-                                           boolean requireDiscontinuity,
-                                           boolean requireCrossDomain,
-                                           int minimumSignals) {
-        HlsAdRule rule = new HlsAdRule();
-        rule.id = id;
-        rule.name = name;
-        rule.version = 1;
-        rule.enabledByDefault = true;
-        rule.enabled = Boolean.TRUE;
-        rule.playlistHostSuffixes = playlistHostSuffixes;
-        rule.hostSuffixes = hostSuffixes;
-        rule.segmentUrlRegex = segmentUrlRegex;
-        rule.minDuration = minDuration;
-        rule.maxDuration = maxDuration;
-        rule.requireDiscontinuity = requireDiscontinuity;
-        rule.requireCrossDomain = requireCrossDomain;
-        rule.minimumSignals = minimumSignals;
-        return rule;
-    }
-
     public String getId() {
         return id == null ? "" : id;
     }

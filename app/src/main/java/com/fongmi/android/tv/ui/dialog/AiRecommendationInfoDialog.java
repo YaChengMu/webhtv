@@ -114,11 +114,12 @@ public class AiRecommendationInfoDialog {
             dialog.dismiss();
         });
         confirm.setOnClickListener(v -> dialog.dismiss());
-        detailScroll.setFocusableInTouchMode(Util.isLeanback());
-        notInterested.setFocusableInTouchMode(Util.isLeanback());
-        confirm.setFocusableInTouchMode(Util.isLeanback());
         dialog.show();
         if (Util.isLeanback()) {
+            detailScroll.setFocusable(true);
+            detailScroll.setFocusableInTouchMode(true);
+            notInterested.setFocusableInTouchMode(true);
+            confirm.setFocusableInTouchMode(true);
             installDetailScrollKeys(activity, detailScroll, notInterested);
             confirm.post(confirm::requestFocus);
         }

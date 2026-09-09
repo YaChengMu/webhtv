@@ -770,16 +770,6 @@ public class PlayerManager implements ParseCallback {
         adAudioRuntime.unbindUi();
     }
 
-    /**
-     * 跳过用户框选的广告区间。区间为媒体时间，不依赖音频指纹功能开关。
-     *
-     * @return 是否真的执行了 seek。false 表示已记录但未跳过（如终点已播过）。
-     */
-    public boolean skipUserAdInterval(long startMs, long endMs, String feedbackId) {
-        if (isReleased()) return false;
-        return adAudioRuntime.skipUserInterval(startMs, endMs, feedbackId);
-    }
-
     public void reloadAdAudioRules() {
         reloadAdAudioSettings();
     }
