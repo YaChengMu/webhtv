@@ -213,6 +213,8 @@ public class PlayerManager implements ParseCallback {
     private final PlaybackMediaSessionController mediaSession =
             new PlaybackMediaSessionController(mediaSignals, mediaClock);
     private final AdAudioRuntimeController adAudioRuntime;
+    private final AdAudioRuntimeController.SpeechAdPlaybackHealth speechAdPlaybackHealth =
+            new AdAudioRuntimeController.SpeechAdPlaybackHealth();
     private final DynamicLutEffect dynamicLutEffect;
     private final AudioManager.OnAudioFocusChangeListener audioFocusChangeListener;
     private final BroadcastReceiver noisyReceiver;
@@ -1749,7 +1751,8 @@ public class PlayerManager implements ParseCallback {
         ijkRealtimeRecoveryController.onUserSeek(playbackAutoSession, now);
         ijkDecodePressureController.onUserSeek(playbackAutoSession, now);
         resetNetworkProtectionSession("user-seek");
-        if (isExo()) {
+        if (isExo() && adAudioRuntime.isSpeechConfigured()
+                && !adAudioRuntime.isSpeechSuppressed()) {
             PlaybackAnalyticsListener.onUserSeekRequested(
                     player.getCurrentPosition(),
                     time,
@@ -1882,6 +1885,16 @@ public void resetTrack(int type) {
 
     private void refreshAdAudioRuntime() {
         if (isReleased()) return;
+        if (isExo()) {
+            PlaybackAnalyticsListener.Snapshot analytics = PlaybackAnalyticsListener.getSnapshot();
+            AdAudioRuntimeController.SpeechAdPlaybackHealth.Decision health =
+                    speechAdPlaybackHealth.observe(
+                    SystemClock.elapsedRealtime(), analytics.droppedFrames(),
+                    PlaybackAnalyticsListener.getAudioUnderrunCount(), analytics.rebufferCount());
+            if (health == AdAudioRuntimeController.SpeechAdPlaybackHealth.Decision.SUPPRESS) {
+                adAudioRuntime.suppressSpeechForCurrentSession();
+            }
+        }
         adAudioRuntime.refresh();
         if (!adAudioRuntime.needsPipelineRebuild()) return;
         if (adAudioPipelineRebuilds >= MAX_AD_AUDIO_PIPELINE_REBUILDS) return;
@@ -7163,6 +7176,7 @@ public void resetTrack(int type) {
         clearExoDecoderResourceRecovery(true);
         lastIjkTimelinePublicationKey = null;
         playbackTrace.begin();
+        speechAdPlaybackHealth.reset();
         long now = SystemClock.elapsedRealtime();
         playbackAutoSession = playbackAutoContextStore.beginSession(playbackTrace.current(), now);
         rtspLiveLagController.beginSession(playbackAutoSession);
