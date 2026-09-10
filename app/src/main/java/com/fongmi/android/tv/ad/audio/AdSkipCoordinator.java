@@ -147,66 +147,6 @@ public final class AdSkipCoordinator implements AutoCloseable {
         return applyAutomaticSeek(legacy, target);
     }
 
-    /**
-     * 用户显式框选的广告区间。与 {@link #onCandidate} 的区别是授权来源：
-     * 框选动作本身即为对本次跳过的授权，因此不经 PROMPT_PENDING 直接执行，
-     * 但全部安全校验照旧，并保留撤销窗口。
-     *
-     * <p>{@code startMs} / {@code endMs} 已经是媒体时间，不做采集时钟映射。
-     *
-     * @return 是否真的执行了 seek。终点已过或校验失败时返回 false，
-     *         调用方应把它当作「已记录，未跳过」而不是失败。
-     */
-    public synchronized boolean onUserInterval(long sessionId, long generation,
-                                               long startMs, long endMs, String feedbackId) {
-        Objects.requireNonNull(feedbackId, "feedbackId");
-        if (closed) return false;
-        if (endMs <= startMs || startMs < 0L) return false;
-        if (state == State.SEEKING || state == State.UNDO_WINDOW) return false;
-
-        CandidateKey key = new CandidateKey(sessionId, generation, feedbackId, startMs, endMs);
-        // 连按去重：同一区间不重复 seek
-        if (key.equals(suppressedKey) || key.equals(activeKey)) return false;
-
-        PlaybackSnapshot snapshot = playback.snapshot(sessionId, generation);
-        if (!isCurrentSeekable(snapshot, sessionId, generation)) {
-            diagnostics.record(AdAudioDiagnostics.Code.SEEK_REJECTED);
-            return false;
-        }
-        long target = clamp(endMs, 0L, snapshot.durationMs());
-        // 终点已经播过去了，没有可跳的内容
-        if (target <= snapshot.positionMs()) {
-            diagnostics.record(AdAudioDiagnostics.Code.SEEK_REJECTED);
-            return false;
-        }
-
-        long originalPositionMs = snapshot.positionMs();
-        // 失败时要还原到调用前的状态：音频候选的 suppressedKey / PROMPT_PENDING
-        // 不属于本次区间反馈，不能被连带清掉。
-        State previousState = state;
-        state = State.SEEKING;
-        SeekResult seek = playback.seekTo(sessionId, generation, target);
-        if (seek == null || !seek.applied() || seek.sessionId() != sessionId) {
-            diagnostics.record(AdAudioDiagnostics.Code.SEEK_REJECTED);
-            state = previousState;
-            return false;
-        }
-
-        long deadline = saturatedAdd(elapsedRealtime.getAsLong(), undoWindowMs);
-        undoContext = new UndoContext(sessionId, seek.generation(), feedbackId,
-                originalPositionMs, target, deadline);
-        activeCandidate = null;
-        activeKey = null;
-        state = State.UNDO_WINDOW;
-        long undoToken = ++actionToken;
-        AdAudioDiagnostics.log("user interval skip id=%s targetMs=%d fromMs=%d",
-                feedbackId, target, originalPositionMs);
-        ui.showUndo(new UndoPrompt(undoContext.sessionId, undoContext.generation,
-                undoContext.ruleId, undoContext.originalPositionMs,
-                undoContext.targetPositionMs, undoWindowMs), new TokenActions(undoToken));
-        return true;
-    }
-
     public synchronized void reset(long sessionId) {
         if (closed) return;
         actionToken++;

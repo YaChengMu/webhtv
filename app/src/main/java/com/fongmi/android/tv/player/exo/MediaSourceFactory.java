@@ -250,25 +250,10 @@ public class MediaSourceFactory implements MediaSource.Factory {
     private DataSource.Factory getDataSourceFactory() {
         if (dataSourceFactory == null) {
             DataSource.Factory cacheDataSource = getCacheDataSource(new DefaultDataSource.Factory(App.get(), getHttpDataSourceFactory()));
-            DataSource.Factory trackedDataSource = new PlaybackBytePositionDataSource.Factory(withPlaylistCleaning(cacheDataSource));
+            DataSource.Factory trackedDataSource = new PlaybackBytePositionDataSource.Factory(cacheDataSource);
             dataSourceFactory = new PriorityTaskDataSource.Factory(trackedDataSource, PLAYBACK_PRIORITY_MANAGER, C.PRIORITY_PLAYBACK, false);
         }
         return dataSourceFactory;
-    }
-
-    /**
-     * Applies the structured HLS ad rules to playlist responses.
-     *
-     * <p>Exo has no local HLS proxy, so {@code HlsManifestCleaner} never ran on this
-     * kernel and user/interface rules were silently inert — only the legacy heuristic
-     * inside the forked playlist parser did anything. Wrapping here gives Exo the same
-     * rule engine IJK already gets through {@code MpvHlsProxy}.
-     *
-     * <p>Deliberately above the cache: rules must apply to cached playlists too, and
-     * editing a rule should take effect on the next load rather than after eviction.
-     */
-    static DataSource.Factory withPlaylistCleaning(DataSource.Factory upstream) {
-        return new HlsPlaylistCleaningDataSource.Factory(upstream);
     }
 
     private CacheDataSource.Factory getCacheDataSource(DataSource.Factory upstreamFactory) {

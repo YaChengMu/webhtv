@@ -43,8 +43,6 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
-import java.util.HashMap;
 
 public class Setting {
 
@@ -1333,45 +1331,6 @@ public class Setting {
 
     public static boolean isHistoryAggregationEffective() {
         return isHistoryAggregationByTmdb();
-    }
-
-    private static final String KEY_TMDB_SEASON_OFFSET = "tmdb_season_offset_map";
-
-    /** 用户自定义的"TMDB 剧名 -> 季号偏移"映射（源季号 + 偏移 = TMDB season_number）。 */
-    public static Map<String, Integer> getTmdbSeasonOffsetMap() {
-        String json = Prefers.getString(KEY_TMDB_SEASON_OFFSET, null);
-        if (json == null || json.isEmpty()) return new HashMap<>();
-        try {
-            Map<String, Integer> map = App.gson().fromJson(json, new TypeToken<Map<String, Integer>>() {}.getType());
-            return map != null ? map : new HashMap<>();
-        } catch (Exception e) {
-            return new HashMap<>();
-        }
-    }
-
-    public static void putTmdbSeasonOffsetMap(Map<String, Integer> map) {
-        Prefers.put(KEY_TMDB_SEASON_OFFSET, App.gson().toJson(map));
-    }
-
-    public static int getTmdbSeasonOffset(String tmdbTitle) {
-        if (tmdbTitle == null) return 0;
-        Integer offset = getTmdbSeasonOffsetMap().get(tmdbTitle.trim());
-        return offset != null ? offset : 0;
-    }
-
-    public static void putTmdbSeasonOffset(String tmdbTitle, int offset) {
-        if (tmdbTitle == null || tmdbTitle.trim().isEmpty()) return;
-        Map<String, Integer> map = getTmdbSeasonOffsetMap();
-        if (offset == 0) map.remove(tmdbTitle.trim());
-        else map.put(tmdbTitle.trim(), offset);
-        putTmdbSeasonOffsetMap(map);
-    }
-
-    public static void removeTmdbSeasonOffset(String tmdbTitle) {
-        if (tmdbTitle == null) return;
-        Map<String, Integer> map = getTmdbSeasonOffsetMap();
-        map.remove(tmdbTitle.trim());
-        putTmdbSeasonOffsetMap(map);
     }
 
     public static boolean isHomeVodAutoLoad() {

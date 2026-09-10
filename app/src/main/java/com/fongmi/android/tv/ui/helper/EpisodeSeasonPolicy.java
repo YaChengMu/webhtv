@@ -1,6 +1,5 @@
 package com.fongmi.android.tv.ui.helper;
 
-import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.title.MediaTitleParser;
 import com.fongmi.android.tv.title.MediaTitleRequest;
 
@@ -132,57 +131,8 @@ public final class EpisodeSeasonPolicy {
         return -1;
     }
 
-    /**
-     * 部分剧集因 TMDB 内部更名导致"源站季编号"与 TMDB 的 season_number 存在固定偏移。
-     * 例如《奔跑吧》前 4 季在 TMDB 中名为"奔跑吧兄弟"，更名后季号连续累计，
-     * 源站"奔跑吧 第10季"实际对应 TMDB 第 14 季（+4 偏移）。
-     * 内置偏移规则按 TMDB 剧名（含别名）匹配；无匹配时返回 0，表示无需校正。
-     */
-    private static final Map<String, Integer> TMDB_TITLE_SEASON_OFFSET = Map.of(
-            "奔跑吧", 4,
-            "奔跑吧兄弟", 4
-    );
-
-    /** 返回源季 -> TMDB 季的固定偏移量（0 表示无需校正）。优先用户自定义，再回退内置规则。 */
-    public static int tmdbSeasonOffset(String tmdbTitle) {
-        if (tmdbTitle == null || tmdbTitle.trim().isEmpty()) return 0;
-        String title = tmdbTitle.trim();
-        // 1) 用户自定义优先
-        int userOffset = Setting.getTmdbSeasonOffset(title);
-        if (userOffset != 0) return userOffset;
-        // 2) 内置规则兜底
-        Integer offset = TMDB_TITLE_SEASON_OFFSET.get(title);
-        if (offset != null) return offset;
-        // 别名匹配：去掉常见前缀/后缀后比较
-        for (String key : TMDB_TITLE_SEASON_OFFSET.keySet()) {
-            if (title.contains(key) || key.contains(title)) return TMDB_TITLE_SEASON_OFFSET.get(key);
-        }
-        return 0;
-    }
-
-    /** 将源站季编号校正为 TMDB season_number（无偏移时原样返回）。 */
-    public static int correctTmdbSeason(int sourceSeason, String tmdbTitle) {
-        if (sourceSeason < 0) return sourceSeason;
-        return sourceSeason + tmdbSeasonOffset(tmdbTitle);
-    }
-
     public static List<Integer> episodeMetadataSeasonCandidates(int sourceSeason) {
         return sourceSeason >= 0 ? List.of(sourceSeason) : List.of();
-    }
-
-    /**
-     * 生成源站季编号对应的 TMDB 季候选（已按偏移校正）。
-     * 优先返回校正后的季号，失败后回退原始季号，保证无偏移时行为不变。
-     */
-    public static List<Integer> episodeMetadataSeasonCandidates(int sourceSeason, String tmdbTitle) {
-        if (sourceSeason < 0) return List.of(1, 0);
-        int corrected = correctTmdbSeason(sourceSeason, tmdbTitle);
-        if (corrected == sourceSeason) return List.of(sourceSeason);
-        List<Integer> candidates = new ArrayList<>();
-        candidates.add(corrected);
-        if (sourceSeason > 0) candidates.add(sourceSeason); // 回退原始季号
-        if (!candidates.contains(0)) candidates.add(0);
-        return candidates;
     }
 
     public static String episodePositionCacheKey(int season, String episodeName) {

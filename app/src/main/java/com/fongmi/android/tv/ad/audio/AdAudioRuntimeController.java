@@ -4,6 +4,7 @@ import com.fongmi.android.tv.player.audio.PlaybackMediaClock;
 import com.fongmi.android.tv.player.audio.PlaybackMediaSignalHub;
 import com.fongmi.android.tv.subtitle.SpeechRecognitionFactory;
 
+import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
@@ -42,6 +43,8 @@ public final class AdAudioRuntimeController implements AutoCloseable {
     private final PlaybackPort playback;
     private final Executor worker;
     private final Runnable workerShutdown;
+    private final Executor speechWorker;
+    private final Runnable speechWorkerShutdown;
     private final ProbeProviderFactory probeProviderFactory;
     private final SpeechProviderFactory speechProviderFactory;
     private final SpeechRecognitionFactory recognitionFactory;
@@ -59,38 +62,38 @@ public final class AdAudioRuntimeController implements AutoCloseable {
     private AdSkipPolicyController.Mode skipMode = AdSkipPolicyController.Mode.PROMPT;
     private SpeechAdConfig speechConfig = SpeechAdConfig.defaults();
     private boolean enabled;
+    private boolean speechSuppressed;
     private String lastRefreshLog = "";
     private long activeSessionId = Long.MIN_VALUE;
-    /** 区间反馈单独跟踪 session/generation，避免与音频管线的重建判定耦合。 */
-    private long intervalSessionId = Long.MIN_VALUE;
-    private long intervalGeneration = Long.MIN_VALUE;
     private boolean closed;
 
     public AdAudioRuntimeController(PlaybackMediaSignalHub hub, PlaybackMediaClock clock,
                                     AdAudioRuleSource ruleSource, PlaybackPort playback) {
-        this(hub, clock, ruleSource, playback, createWorker());
+        this(hub, clock, ruleSource, playback, createWorkers(), false);
     }
 
     public AdAudioRuntimeController(PlaybackMediaSignalHub hub, PlaybackMediaClock clock,
                                     AdAudioRuleSource ruleSource, PlaybackPort playback,
                                     SpeechRecognitionFactory recognitionFactory) {
-        this(hub, clock, ruleSource, playback, createWorker(), recognitionFactory);
+        this(hub, clock, ruleSource, playback, createWorkers(), recognitionFactory);
     }
 
     private AdAudioRuntimeController(PlaybackMediaSignalHub hub, PlaybackMediaClock clock,
                                      AdAudioRuleSource ruleSource, PlaybackPort playback,
-                                     Worker worker,
+                                     Workers workers,
                                      SpeechRecognitionFactory recognitionFactory) {
-        this(hub, clock, ruleSource, playback, worker.executor,
-                worker.executor::shutdownNow,
+        this(hub, clock, ruleSource, playback, workers.analysis,
+                workers.analysis::shutdownNow, workers.speech,
+                workers.speech::shutdown,
                 ignored -> new NoopAdAudioSignalProvider("probe"),
                 null, Objects.requireNonNull(recognitionFactory, "recognitionFactory"));
     }
     private AdAudioRuntimeController(PlaybackMediaSignalHub hub, PlaybackMediaClock clock,
                                      AdAudioRuleSource ruleSource, PlaybackPort playback,
-                                     Worker worker) {
-        this(hub, clock, ruleSource, playback, worker.executor,
-                worker.executor::shutdownNow,
+                                     Workers workers, boolean useNoopSpeechProvider) {
+        this(hub, clock, ruleSource, playback, workers.analysis,
+                workers.analysis::shutdownNow, workers.speech,
+                workers.speech::shutdown,
                 ignored -> new NoopAdAudioSignalProvider("probe"),
                 () -> new NoopAdAudioSignalProvider(SpeechAdSignalProvider.ID), null);
     }
@@ -99,6 +102,7 @@ public final class AdAudioRuntimeController implements AutoCloseable {
                              AdAudioRuleSource ruleSource, PlaybackPort playback,
                              Executor worker, Runnable workerShutdown) {
         this(hub, clock, ruleSource, playback, worker, workerShutdown,
+                worker, () -> { },
                 ignored -> new NoopAdAudioSignalProvider("probe"),
                 () -> new NoopAdAudioSignalProvider(SpeechAdSignalProvider.ID), null);
     }
@@ -106,8 +110,30 @@ public final class AdAudioRuntimeController implements AutoCloseable {
     AdAudioRuntimeController(PlaybackMediaSignalHub hub, PlaybackMediaClock clock,
                              AdAudioRuleSource ruleSource, PlaybackPort playback,
                              Executor worker, Runnable workerShutdown,
+                             Executor speechWorker, Runnable speechWorkerShutdown,
+                             ProbeProviderFactory probeProviderFactory,
+                             SpeechProviderFactory speechProviderFactory) {
+        this(hub, clock, ruleSource, playback, worker, workerShutdown,
+                speechWorker, speechWorkerShutdown,
+                probeProviderFactory, speechProviderFactory, null);
+    }
+
+    AdAudioRuntimeController(PlaybackMediaSignalHub hub, PlaybackMediaClock clock,
+                             AdAudioRuleSource ruleSource, PlaybackPort playback,
+                             SpeechRecognitionFactory recognitionFactory,
+                             Executor speechWorker, Runnable speechWorkerShutdown) {
+        this(hub, clock, ruleSource, playback, Runnable::run, () -> { },
+                speechWorker, speechWorkerShutdown,
+                ignored -> new NoopAdAudioSignalProvider("probe"), null,
+                Objects.requireNonNull(recognitionFactory, "recognitionFactory"));
+    }
+
+    AdAudioRuntimeController(PlaybackMediaSignalHub hub, PlaybackMediaClock clock,
+                             AdAudioRuleSource ruleSource, PlaybackPort playback,
+                             Executor worker, Runnable workerShutdown,
                              ProbeProviderFactory probeProviderFactory) {
         this(hub, clock, ruleSource, playback, worker, workerShutdown,
+                worker, () -> { },
                 probeProviderFactory,
                 () -> new NoopAdAudioSignalProvider(SpeechAdSignalProvider.ID), null);
     }
@@ -118,12 +144,14 @@ public final class AdAudioRuntimeController implements AutoCloseable {
                              ProbeProviderFactory probeProviderFactory,
                              SpeechProviderFactory speechProviderFactory) {
         this(hub, clock, ruleSource, playback, worker, workerShutdown,
+                worker, () -> { },
                 probeProviderFactory, speechProviderFactory, null);
     }
 
     private AdAudioRuntimeController(PlaybackMediaSignalHub hub, PlaybackMediaClock clock,
                                      AdAudioRuleSource ruleSource, PlaybackPort playback,
                                      Executor worker, Runnable workerShutdown,
+                                     Executor speechWorker, Runnable speechWorkerShutdown,
                                      ProbeProviderFactory probeProviderFactory,
                                      SpeechProviderFactory speechProviderFactory,
                                      SpeechRecognitionFactory recognitionFactory) {
@@ -133,6 +161,8 @@ public final class AdAudioRuntimeController implements AutoCloseable {
         this.playback = Objects.requireNonNull(playback, "playback");
         this.worker = Objects.requireNonNull(worker, "worker");
         this.workerShutdown = workerShutdown;
+        this.speechWorker = Objects.requireNonNull(speechWorker, "speechWorker");
+        this.speechWorkerShutdown = speechWorkerShutdown;
         this.probeProviderFactory = Objects.requireNonNull(
                 probeProviderFactory, "probeProviderFactory");
         if (speechProviderFactory == null && recognitionFactory == null) {
@@ -157,6 +187,7 @@ public final class AdAudioRuntimeController implements AutoCloseable {
         loadRulesLocked();
         deactivateLocked();
         PlaybackMediaSignalHub.Session session = hub.session();
+        speechSuppressed = false;
         if (coordinator != null) coordinator.reset(session.id());
         refreshLocked();
     }
@@ -175,14 +206,12 @@ public final class AdAudioRuntimeController implements AutoCloseable {
         if (coordinator != null) coordinator.close();
         this.ui = ui;
         this.coordinator = new AdSkipCoordinator(playback, ui, 5_000L, diagnostics);
-        resetIntervalBaseline();
         refreshLocked();
     }
 
     public synchronized void unbindUi() {
         if (coordinator != null) coordinator.close();
         coordinator = null;
-        resetIntervalBaseline();
         ui = null;
         deactivateLocked();
     }
@@ -194,6 +223,9 @@ public final class AdAudioRuntimeController implements AutoCloseable {
 
     public synchronized void suspend() {
         if (closed) return;
+        // suspend() is called before a new media item starts. Suppression belongs to the
+        // previous playback session and must not silently carry into the next item.
+        speechSuppressed = false;
         deactivateLocked();
         PlaybackMediaSignalHub.Session session = hub.session();
         if (coordinator != null) coordinator.reset(session.id());
@@ -210,39 +242,6 @@ public final class AdAudioRuntimeController implements AutoCloseable {
 
     public synchronized AdAudioRuleSnapshot snapshot() {
         return snapshot;
-    }
-
-    /**
-     * 执行用户框选区间的即时跳过。
-     *
-     * <p>区间反馈不依赖音频指纹功能：即使指纹与语音通道都关闭、没有任何规则，
-     * 用户依然可以框选广告并要求跳过。因此这里在 UI 已绑定但 coordinator
-     * 尚未建立时按需创建一个 —— {@link #bindUi} 只在音频通道启用路径上被调用，
-     * 不能作为区间跳过的前置条件。
-     *
-     * @return 是否真的执行了 seek；未绑定 UI 或校验失败时为 false
-     */
-    public synchronized boolean skipUserInterval(long startMs, long endMs, String feedbackId) {
-        if (closed || ui == null) return false;
-        PlaybackMediaSignalHub.Session session = hub.session();
-        if (coordinator == null) {
-            coordinator = new AdSkipCoordinator(playback, ui, 5_000L, diagnostics);
-        } else if (intervalSessionId != Long.MIN_VALUE
-                && (intervalSessionId != session.id() || intervalGeneration != session.generation())) {
-            // timeline reset 只经 PCM provider 的回调转发给 coordinator。音频通道关闭时
-            // 那条路径不存在，coordinator 会永远卡在上一次跳过留下的 UNDO_WINDOW 上，
-            // 之后每一次区间提交都被拒。这里按播放实际状态主动对齐。
-            // 不复用 activeSessionId：那个字段决定音频管线是否需要重建，
-            // 从这条路径改写它会让 refreshLocked 漏掉一次必要的重建。
-            coordinator.reset(intervalSessionId);
-        }
-        boolean applied = coordinator.onUserInterval(session.id(), session.generation(),
-                startMs, endMs, feedbackId);
-        // seek 会推进 generation，基线取调用后的实际状态
-        PlaybackMediaSignalHub.Session current = hub.session();
-        intervalSessionId = current.id();
-        intervalGeneration = current.generation();
-        return applied;
     }
 
     public synchronized AdSkipPolicyController.Mode skipMode() {
@@ -264,6 +263,23 @@ public final class AdAudioRuntimeController implements AutoCloseable {
         if (rebuild) reconfigureLocked();
     }
 
+    /** Suppresses only speech analysis until the next media session. */
+    public synchronized void suppressSpeechForCurrentSession() {
+        if (closed || speechSuppressed) return;
+        speechSuppressed = true;
+        diagnostics.record(AdAudioDiagnostics.Code.SPEECH_RUNTIME_SUPPRESSED);
+        deactivateSpeechLocked();
+        refreshLocked();
+    }
+
+    public synchronized boolean isSpeechSuppressed() {
+        return speechSuppressed;
+    }
+
+    public synchronized boolean isSpeechConfigured() {
+        return speechConfig.enabled() && speechConfig.hasSpeechRules();
+    }
+
     public AdAudioDiagnostics.Snapshot diagnostics() {
         return diagnostics.snapshot();
     }
@@ -271,10 +287,10 @@ public final class AdAudioRuntimeController implements AutoCloseable {
     public synchronized void stop() {
         if (closed) return;
         enabled = false;
+        speechSuppressed = false;
         deactivateLocked();
         if (coordinator != null) coordinator.close();
         coordinator = null;
-        resetIntervalBaseline();
         ui = null;
     }
 
@@ -285,14 +301,9 @@ public final class AdAudioRuntimeController implements AutoCloseable {
         deactivateLocked();
         if (coordinator != null) coordinator.close();
         coordinator = null;
-        resetIntervalBaseline();
         ui = null;
         if (workerShutdown != null) workerShutdown.run();
-    }
-
-    private void resetIntervalBaseline() {
-        intervalSessionId = Long.MIN_VALUE;
-        intervalGeneration = Long.MIN_VALUE;
+        if (speechWorkerShutdown != null) speechWorkerShutdown.run();
     }
 
     private void loadRulesLocked() {
@@ -315,7 +326,8 @@ public final class AdAudioRuntimeController implements AutoCloseable {
 
     private void refreshLocked() {
         boolean fingerprintReady = enabled && !snapshot.hasError() && snapshot.hasRules();
-        boolean speechReady = speechConfig.enabled() && !speechConfig.keywords().isEmpty();
+        boolean speechReady = !speechSuppressed
+                && speechConfig.enabled() && speechConfig.hasSpeechRules();
         if (ui == null || (!fingerprintReady && !speechReady)) {
             // Transition-only: refreshLocked runs every 5s from the host position pump, and
             // an unsampled line here would churn the bounded debug-log ring.
@@ -429,7 +441,14 @@ public final class AdAudioRuntimeController implements AutoCloseable {
                     .map(AudioFingerprintRule::id)
                     .forEach(allowedRuleIds::add);
         }
-        if (speechReady) allowedRuleIds.add(SpeechAdSignalProvider.RULE_ID);
+        if (speechReady) {
+            if (!speechConfig.keywords().isEmpty()) {
+                allowedRuleIds.add(SpeechAdSignalProvider.RULE_ID);
+            }
+            speechConfig.rules().rules().stream()
+                    .map(SpeechAdRule::id)
+                    .forEach(allowedRuleIds::add);
+        }
         AdAudioDetectionMultiplexer nextMux = new AdAudioDetectionMultiplexer(
                 context, routingSnapshot.version(), Set.copyOf(allowedRuleIds),
                 RUNTIME_CANDIDATE_CAPACITY, output);
@@ -481,6 +500,12 @@ public final class AdAudioRuntimeController implements AutoCloseable {
         closeProvider(oldPcm);
         if (oldMux != null) oldMux.close();
         if (oldPolicy != null) oldPolicy.close();
+    }
+
+    private void deactivateSpeechLocked() {
+        AdAudioSignalProvider oldSpeech = speechProvider;
+        speechProvider = null;
+        closeProvider(oldSpeech);
     }
 
     private boolean isActiveLocked() {
@@ -545,7 +570,7 @@ public final class AdAudioRuntimeController implements AutoCloseable {
             if (recognitionFactory != null) {
                 return new SpeechAdSignalProvider(
                         hub, recognitionFactory, () -> speechConfig,
-                        worker, diagnostics);
+                        speechWorker, diagnostics);
             }
             AdAudioSignalProvider provider = speechProviderFactory.create();
             return provider == null
@@ -558,14 +583,47 @@ public final class AdAudioRuntimeController implements AutoCloseable {
     }
 
     private AdAudioRuleSnapshot routingSnapshotLocked() {
-        if (!snapshot.version().isEmpty()) return snapshot;
+        String version = snapshot.version().isEmpty()
+                ? "speech-runtime-v1" : snapshot.version();
+        if (!speechConfig.rules().isEmpty()) {
+            version = withSpeechRulesVersion(version, speechConfig.rulesVersion());
+        }
+        if (version.equals(snapshot.version())) return snapshot;
         return new AdAudioRuleSnapshot(
-                snapshot.sourceId(), "speech-runtime-v1", snapshot.ruleSet(),
+                snapshot.sourceId(), version, snapshot.ruleSet(),
                 snapshot.warnings(), snapshot.lastError(), snapshot.probeSidecar());
+    }
+
+    private static String withSpeechRulesVersion(String baseVersion, String rulesVersion) {
+        String suffix = ":speech-v2-" + rulesVersion;
+        if (baseVersion.length() + suffix.length() <= 128) {
+            return baseVersion + suffix;
+        }
+        // AdAudioDetectionMultiplexer and AdSkipPolicyController intentionally bound
+        // routing versions. Preserve a deterministic identity without allowing an
+        // unusually long external source version to break speech activation.
+        return "speech-base-" + sha256Prefix(baseVersion) + suffix;
+    }
+
+    private static String sha256Prefix(String value) {
+        try {
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8));
+            StringBuilder result = new StringBuilder(16);
+            for (int i = 0; i < 8; i++) {
+                result.append(String.format("%02x", digest[i] & 0xff));
+            }
+            return result.toString();
+        } catch (java.security.NoSuchAlgorithmException error) {
+            throw new IllegalStateException("SHA-256 unavailable", error);
+        }
     }
 
     private void installModeResolver(AdSkipPolicyController target) {
         target.setMode(skipMode);
+        target.setPromptOnlyRuleIds(speechConfig.rules().rules().stream()
+                .map(SpeechAdRule::id)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet()));
         target.setModeResolver(providerId -> SpeechAdSignalProvider.ID.equals(providerId)
                 ? speechConfig.mode() : skipMode);
     }
@@ -608,15 +666,115 @@ public final class AdAudioRuntimeController implements AutoCloseable {
         }
     }
 
-    private static Worker createWorker() {
-        ExecutorService executor = Executors.newSingleThreadExecutor(r -> {
+    private static Workers createWorkers() {
+        ExecutorService analysis = Executors.newSingleThreadExecutor(r -> {
             Thread thread = new Thread(r, "ad-audio-matcher");
             thread.setDaemon(true);
             return thread;
         });
-        return new Worker(executor);
+        ExecutorService speech = Executors.newSingleThreadExecutor(r -> {
+            Runnable speechTask = () -> {
+                try {
+                    android.os.Process.setThreadPriority(
+                            android.os.Process.THREAD_PRIORITY_BACKGROUND);
+                } catch (RuntimeException ignored) {
+                }
+                r.run();
+            };
+            Thread thread = new Thread(speechTask, "ad-audio-speech-owner");
+            thread.setDaemon(true);
+            try {
+                thread.setPriority(Thread.NORM_PRIORITY - 1);
+            } catch (RuntimeException ignored) {
+            }
+            return thread;
+        });
+        return new Workers(analysis, speech);
     }
 
-    private record Worker(ExecutorService executor) {
+    /** Pure-Java playback health gate used to disable speech work after confirmed degradation. */
+    public static final class SpeechAdPlaybackHealth {
+
+        public static final long SAMPLE_INTERVAL_MS = 5_000L;
+        public static final long MAX_SAMPLE_GAP_MS = 10_000L;
+        public static final int REQUIRED_DEGRADED_SAMPLES = 2;
+        public static final long DROPPED_FRAMES_PER_SECOND_THRESHOLD = 4L;
+
+        private long lastSampleAtMs = -1L;
+        private long lastDroppedFrames = -1L;
+        private long lastAudioUnderruns = -1L;
+        private long lastRebufferCount = -1L;
+        private int degradedSamples;
+        private boolean suppressed;
+
+        public synchronized Decision observe(long nowMs, long droppedFrames,
+                                             long audioUnderruns, long rebufferCount) {
+            long now = Math.max(0L, nowMs);
+            long dropped = Math.max(0L, droppedFrames);
+            long underruns = Math.max(0L, audioUnderruns);
+            long rebuffers = Math.max(0L, rebufferCount);
+            if (suppressed) return Decision.SUPPRESSED;
+            if (lastSampleAtMs >= 0L && now <= lastSampleAtMs) return Decision.HELD;
+            if (lastSampleAtMs >= 0L && now - lastSampleAtMs < SAMPLE_INTERVAL_MS) {
+                return Decision.HELD;
+            }
+            boolean gapTooLarge = lastSampleAtMs >= 0L
+                    && now - lastSampleAtMs > MAX_SAMPLE_GAP_MS;
+            long intervalMs = lastSampleAtMs < 0L ? 0L : now - lastSampleAtMs;
+            long droppedDelta = positiveDelta(dropped, lastDroppedFrames);
+            long underrunDelta = positiveDelta(underruns, lastAudioUnderruns);
+            long rebufferDelta = positiveDelta(rebuffers, lastRebufferCount);
+            lastSampleAtMs = now;
+            lastDroppedFrames = dropped;
+            lastAudioUnderruns = underruns;
+            lastRebufferCount = rebuffers;
+            if (gapTooLarge) {
+                degradedSamples = 0;
+                return Decision.OBSERVED;
+            }
+            long minimumDropped = intervalMs <= 0L
+                    || intervalMs > (Long.MAX_VALUE - 999L)
+                    / DROPPED_FRAMES_PER_SECOND_THRESHOLD
+                    ? Long.MAX_VALUE
+                    : (intervalMs * DROPPED_FRAMES_PER_SECOND_THRESHOLD + 999L) / 1_000L;
+            boolean droppedRate = droppedDelta >= minimumDropped;
+            boolean degraded = underrunDelta > 0L || rebufferDelta > 0L || droppedRate;
+            degradedSamples = degraded
+                    ? Math.min(REQUIRED_DEGRADED_SAMPLES, degradedSamples + 1) : 0;
+            if (degradedSamples >= REQUIRED_DEGRADED_SAMPLES) {
+                suppressed = true;
+                return Decision.SUPPRESS;
+            }
+            return degraded ? Decision.DEGRADED : Decision.OBSERVED;
+        }
+
+        public synchronized boolean isSuppressed() {
+            return suppressed;
+        }
+
+        public synchronized void reset() {
+            lastSampleAtMs = -1L;
+            lastDroppedFrames = -1L;
+            lastAudioUnderruns = -1L;
+            lastRebufferCount = -1L;
+            degradedSamples = 0;
+            suppressed = false;
+        }
+
+        private static long positiveDelta(long current, long previous) {
+            if (previous < 0L || current <= previous) return 0L;
+            return current - previous;
+        }
+
+        public enum Decision {
+            HELD,
+            OBSERVED,
+            DEGRADED,
+            SUPPRESS,
+            SUPPRESSED
+        }
+    }
+
+    private record Workers(ExecutorService analysis, ExecutorService speech) {
     }
 }

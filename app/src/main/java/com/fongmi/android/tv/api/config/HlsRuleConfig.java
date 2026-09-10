@@ -45,7 +45,6 @@ public final class HlsRuleConfig {
         compileBuiltin(builtin, overrides, compiled, summaries);
         compileExternal("vod", VodConfig.get().getConfig().getUrl(), VodConfig.get().getHlsRules(), overrides, compiled, summaries);
         compileExternal("live", LiveConfig.get().getConfig().getUrl(), LiveConfig.get().getHlsRules(), overrides, compiled, summaries);
-        compileExternal("user", "local", UserHlsRuleStore.load(), overrides, compiled, summaries);
         rules = List.copyOf(compiled);
         entries = List.copyOf(summaries);
         dirty = false;

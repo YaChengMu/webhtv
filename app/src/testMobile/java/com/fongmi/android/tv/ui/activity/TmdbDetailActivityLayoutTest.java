@@ -443,41 +443,15 @@ public class TmdbDetailActivityLayoutTest {
         assertTrue("wide and mobile inline controls must dispatch the ad feedback action",
                 source.contains("binding.playerAdFeedback.setOnClickListener(guarded(this::onInlineAdFeedback));")
                         && source.contains("detailActionView(R.id.adFeedback, View.class).setOnClickListener(guarded(this::onInlineAdFeedback));"));
-        assertTrue("detail inline ad feedback must only require a seekable VOD timeline, not AI config",
+        assertTrue("detail inline playback must use the same HLS and AI availability gate as the native player",
                 source.contains("private boolean isInlineAdFeedbackEnabled()")
-                        && source.contains("Setting.isAdblock() && !player().isLive() && player().getDuration() > 0"));
-        assertFalse("AI must no longer gate the ad feedback button",
-                source.contains("Setting.isAiConfigReady() && Setting.isAdblock() && Setting.isAiAdDetection()"));
-        assertTrue("detail inline playback must route ad feedback through the shared controller",
+                        && source.contains("Setting.isAiConfigReady() && Setting.isAdblock() && Setting.isAiAdDetection()")
+                        && source.contains("MediaSourceFactory.isHlsUrl(player().getUrl())"));
+        assertTrue("detail inline playback must submit AI analysis and save confirmed user rules",
                 source.contains("private void submitInlineAdFeedback()")
-                        && source.contains("controller.onMarkedInterval(start, end)")
-                        && source.contains("controller.onQuickReport(mAdFeedbackHost.cachedEvidence())")
-                        && source.contains("new AdFeedbackController(mAdFeedbackHost)"));
-        assertTrue("marked interval must read the position before clearing the mark so a released player keeps it",
-                source.contains("long end = mAdFeedbackHost.safePositionMs();")
-                        && source.indexOf("long end = mAdFeedbackHost.safePositionMs();")
-                                < source.indexOf("long start = mAdMarkStartMs;"));
-        assertTrue("source or episode switch must invalidate in-flight attribution",
-                source.contains("private void resetAdFeedback()")
-                        && source.contains("mAdFeedback.invalidate();")
-                        && source.contains("mAdFeedbackHost.invalidateEvidence();")
-                        && source.contains("resetAdFeedback();"));
-        assertTrue("playback host must feed the site baseline or the domain channel stays dead",
-                source.contains("private void recordAdFeedbackHost()")
-                        && source.contains("mAdFeedbackHost.recordPlaybackHost();")
-                        && source.contains("recordAdFeedbackHost(); // 播放地址已确定，记入本站域名基线"));
-        assertTrue("the feedback dialog must be closed on destroy to avoid leaking the activity",
-                source.contains("if (mAdFeedbackDialog != null) mAdFeedbackDialog.close();"));
-        assertTrue("long press must arm the interval marking mode",
-                source.contains("private boolean onInlineAdFeedbackLongPress()")
-                        && source.contains("binding.playerAdFeedback.setOnLongClickListener(view -> onInlineAdFeedbackLongPress());")
-                        && source.contains("detailActionView(R.id.adFeedback, View.class).setOnLongClickListener(view -> onInlineAdFeedbackLongPress());"));
-        assertTrue("confirmed plans must be applied through the shared applier",
-                source.contains("AdRulePlanApplier.apply(")
-                        && source.contains("case APPLIED -> R.string.ad_interval_rule_saved;"));
-        assertFalse("the duplicated per-activity AI request builder must be gone",
-                source.contains("private AdDetectionRequest buildInlineAdDetectionRequest()")
-                        || source.contains("new AiAdDetectionService(config).analyze(request)"));
+                        && source.contains("new AiAdDetectionService(config).analyze(request)")
+                        && source.contains("AdRulePreviewDialog.create(result).show(this, confirmedResult ->")
+                        && source.contains("UserAdRuleStore.add(rule);"));
     }
 
     /**
@@ -1165,6 +1139,43 @@ public class TmdbDetailActivityLayoutTest {
                 restoreBody.contains("if (!(adapter instanceof TmdbEpisodeAdapter episodeAdapter)) return;")
                         && restoreBody.contains("int position = episodeAdapter.getPosition(episode);")
                         && restoreBody.contains("focusTmdbRecyclerItem(recycler, position);"));
+    }
+
+    @Test
+    public void episodeDetailDismissRepairsInvalidVisibleHoldersBeforeRestoringFocus() throws Exception {
+        String source = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
+        String recovery = javaBlockAt(source, "private void recoverRecyclerViewIfDetached(");
+        String show = javaBlockAt(source, "private void showTmdbEpisodeDetail(");
+        String dismiss = javaBlockAt(show, "OnDismissListener dismissListener");
+
+        assertTrue("visible cards with pending updates need a real layout so DPAD keys no longer see NO_POSITION",
+                recovery.contains("rv == binding.episodeContainer && rv.hasPendingAdapterUpdates()")
+                        && recovery.contains("if (rv.getChildCount() > 0 && !pendingEpisodeLayout) return;")
+                        && recovery.contains("rv.forceLayout();")
+                        && recovery.contains("v.forceLayout();")
+                        && recovery.contains("root.requestLayout();"));
+        assertTrue("register the one-shot post-layout restore before repairing the stalled layout",
+                dismiss.contains("OneShotPreDrawListener.add(returnRecycler, () -> {")
+                        && dismiss.contains("restoreEpisodeDetailFocus(returnRecycler, episode);")
+                        && dismiss.indexOf("OneShotPreDrawListener.add(") < dismiss.indexOf("recoverEpisodeViewportIfDetached();"));
+        assertTrue("the independent episode panel keeps its existing restore path",
+                dismiss.contains("if (returnRecycler != binding.episodeContainer) {")
+                        && dismiss.contains("returnRecycler.post(() -> restoreEpisodeDetailFocus(returnRecycler, episode));"));
+        assertTrue("dismiss must not steal focus from another button or an already closed activity",
+                dismiss.contains("!returnRecycler.isAttachedToWindow()")
+                        && dismiss.contains("isFinishing() || isDestroyed()")
+                        && dismiss.contains("!returnRecycler.isShown()"));
+        int recyclerFocusStart = source.indexOf("private boolean focusTmdbRecyclerItem(RecyclerView recycler, int position)");
+        int recyclerFocusEnd = source.indexOf("private boolean onDetailEpisodeContainerKey", recyclerFocusStart);
+        String recyclerFocus = recyclerFocusStart >= 0 && recyclerFocusEnd > recyclerFocusStart
+                ? source.substring(recyclerFocusStart, recyclerFocusEnd) : "";
+        assertTrue("restoring an episode card must retry until its ViewHolder is attached and verify requestFocus succeeded",
+                recyclerFocus.contains("recycler.isComputingLayout()")
+                        && recyclerFocus.contains("findViewHolderForAdapterPosition(boundedTarget)")
+                        && recyclerFocus.contains("visibleHolder.itemView.requestFocus()")
+                        && recyclerFocus.contains("requestFocusFromTouch()")
+                        && recyclerFocus.contains("getCurrentFocus() == visibleHolder.itemView")
+                        && recyclerFocus.contains("postOnAnimation(() -> focusTmdbRecyclerItem(recycler, boundedTarget, attempt + 1))"));
     }
 
     @Test
@@ -2288,6 +2299,7 @@ public class TmdbDetailActivityLayoutTest {
         String navigationBody = navigation >= 0 && detailRows > navigation ? activity.substring(navigation, detailRows) : "";
         String detailRowsBody = detailRows >= 0 && rowKey > detailRows ? activity.substring(detailRows, rowKey) : "";
         String rowKeyBody = rowKey >= 0 && episodeKey > rowKey ? activity.substring(rowKey, episodeKey) : "";
+        String focusBody = focusItem >= 0 && episodeKey > focusItem ? activity.substring(focusItem, episodeKey) : "";
 
         assertTrue(activityPath + " is missing TMDB horizontal row key helpers",
                 navigation >= 0 && detailRows > navigation && rowKey > detailRows && focusItem > rowKey && episodeKey > focusItem);
@@ -2308,10 +2320,10 @@ public class TmdbDetailActivityLayoutTest {
                         && rowKeyBody.contains("int target = KeyUtil.isLeftKey(event) ? position - 1 : position + 1;")
                         && rowKeyBody.contains("if (target < 0 || target >= adapter.getItemCount()) return true;")
                         && rowKeyBody.contains("focusTmdbRecyclerItem(recycler, target);")
-                        && rowKeyBody.contains("RecyclerView.ViewHolder visibleHolder = recycler.findViewHolderForAdapterPosition(target);")
-                        && rowKeyBody.contains("visibleHolder.itemView.requestFocus();")
-                        && rowKeyBody.contains("recycler.scrollToPosition(target);")
-                        && rowKeyBody.contains("holder.itemView.requestFocus();"));
+                        && focusBody.contains("RecyclerView.ViewHolder visibleHolder = recycler.findViewHolderForAdapterPosition(boundedTarget);")
+                        && focusBody.contains("visibleHolder.itemView.requestFocus()")
+                        && focusBody.contains("recycler.scrollToPosition(boundedTarget);")
+                        && focusBody.contains("postOnAnimation(() -> focusTmdbRecyclerItem(recycler, boundedTarget, attempt + 1)"));
     }
 
     @Test
