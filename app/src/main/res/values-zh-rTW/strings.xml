@@ -2733,4 +2733,13 @@
     <string name="setting_ad_probe_revision">revision %1$d · %2$d 條規則</string>
     <string name="setting_ad_probe_never">尚未拉取</string>
     <string name="setting_ad_probe_url_invalid">規則源必須以 https:// 開頭</string>
-    <string name="setting_ad_probe_source_disabled">請先填寫社群規則源位址</string></resources>
+    <string name="setting_ad_probe_source_disabled">請先填寫社群規則源位址</string>
+    <string name="dialog_tmdb_test_config">測試配置</string>
+    <string name="dialog_tmdb_test_result_title">配置測試結果</string>
+    <string name="dialog_tmdb_test_api_success">TMDB API：連線成功並傳回有效資料（%1$d 毫秒）</string>
+    <string name="dialog_tmdb_test_api_failed">TMDB API：測試失敗（%1$s，%2$d 毫秒）</string>
+    <string name="dialog_tmdb_test_image_success">圖片網域：連線成功並傳回有效圖片（%1$d 毫秒）</string>
+    <string name="dialog_tmdb_test_image_failed">圖片網域：測試失敗（%1$s，%2$d 毫秒）</string>
+    <string name="dialog_tmdb_test_omdb_success">OMDb API：連線成功並傳回有效資料（%1$d 毫秒）</string>
+    <string name="dialog_tmdb_test_omdb_failed">OMDb API：測試失敗（%1$s，%2$d 毫秒）</string>
+</resources>

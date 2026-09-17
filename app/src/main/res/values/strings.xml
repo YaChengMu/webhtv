@@ -2276,6 +2276,18 @@
     <string name="ad_stats_reset_confirm">Reset all statistics?</string>
     <string name="ad_stats_empty">No statistics yet</string>
     <string name="ad_stats_overview">Overview</string>
+    <string name="ad_stats_log">Block log</string>
+    <string name="ad_stats_chart">Charts</string>
+    <string name="ad_log_site_name">Site name</string>
+    <string name="ad_log_site_domain">Site domain</string>
+    <string name="ad_log_rule_domain">Block rule (domain)</string>
+    <string name="ad_log_blocked_at">Blocked at</string>
+    <string name="ad_log_segment_start">Segment start time</string>
+    <string name="ad_log_segment_end">Segment end time</string>
+    <string name="ad_log_segment_duration">Segment duration</string>
+    <string name="ad_log_playback_context">Playback title / line / episode</string>
+    <string name="ad_log_pipeline">Pipeline</string>
+    <string name="ad_log_unknown">Unknown</string>
     <string name="ad_site_overview">Site overview</string>
     <string name="ad_site_count">Sites involved</string>
     <string name="ad_top_site">Most blocked site</string>
@@ -2769,4 +2781,13 @@
     <string name="setting_ad_probe_revision">Revision %1$d · %2$d rules</string>
     <string name="setting_ad_probe_never">Never fetched</string>
     <string name="setting_ad_probe_url_invalid">The rule source must start with https://</string>
-    <string name="setting_ad_probe_source_disabled">Set a community rule source first</string></resources>
+    <string name="setting_ad_probe_source_disabled">Set a community rule source first</string>
+    <string name="dialog_tmdb_test_config">Test configuration</string>
+    <string name="dialog_tmdb_test_result_title">Configuration test</string>
+    <string name="dialog_tmdb_test_api_success">TMDB API: connected and returned valid data (%1$d ms)</string>
+    <string name="dialog_tmdb_test_api_failed">TMDB API: failed (%1$s, %2$d ms)</string>
+    <string name="dialog_tmdb_test_image_success">Image domain: connected and returned a valid image (%1$d ms)</string>
+    <string name="dialog_tmdb_test_image_failed">Image domain: failed (%1$s, %2$d ms)</string>
+    <string name="dialog_tmdb_test_omdb_success">OMDb API: connected and returned valid data (%1$d ms)</string>
+    <string name="dialog_tmdb_test_omdb_failed">OMDb API: failed (%1$s, %2$d ms)</string>
+</resources>

@@ -1474,7 +1474,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
                 .setTitle(R.string.intro_skip_confirm_title)
                 .setMessage(IntroSkipKinds.confirmMessage(segment))
                 .setPositiveButton(android.R.string.ok, (dialog, which) -> action.run())
-                .setNegativeButton(android.R.string.cancel, null)
+                .setNegativeButton(android.R.string.cancel, (dialog, which) -> mIntroSkipPlayback.declineConfirmation(segment))
                 .show();
             mIntroSkipConfirmDialog.setOnDismissListener(dialog -> {
                 mIntroSkipPlayback.cancelConfirmation(segment);
@@ -3670,7 +3670,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     }
 
     private Episode getAdjacentEpisode(int offset) {
-        List<Episode> items = mFlagAdapter == null || mFlagAdapter.isEmpty() ? mEpisodeAdapter.getItems() : getFlag().getEpisodes();
+        List<Episode> items = mFlagAdapter == null || mFlagAdapter.isEmpty() ? getCurrentEpisodeItems() : getFlag().getEpisodes();
         if (items.isEmpty()) return new Episode();
         int position = getSelectedEpisodePosition(items) + offset;
         position = Math.max(0, Math.min(position, items.size() - 1));

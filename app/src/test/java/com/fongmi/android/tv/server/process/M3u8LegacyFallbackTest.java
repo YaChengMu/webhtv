@@ -17,6 +17,6 @@ public class M3u8LegacyFallbackTest {
 
         assertFalse(source.contains("hlsRules(), true"));
         assertFalse(source.contains("rules, true"));
-        assertTrue(source.contains("legacyFallback = !rules.isEmpty()"));
+        assertTrue(source.contains("legacyFallback = !rules.isEmpty() && HlsRuleConfig.isLegacyFallbackEnabled()"));
     }
 }

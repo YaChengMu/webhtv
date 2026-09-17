@@ -92,6 +92,72 @@ public class AdBlockStatsDialogLayoutTest {
     }
 
     @Test
+    public void statsDialogIncludesDetailedLogAndChartTabsForBothFlavors() throws Exception {
+        Path root = findRepositoryRoot();
+        for (String flavor : new String[] {"mobile", "leanback"}) {
+            String layout = read(root.resolve(Path.of("app", "src", flavor, "res", "layout", "dialog_ad_block_stats.xml")));
+            String dialog = read(root.resolve(Path.of("app", "src", flavor, "java", "com", "fongmi", "android", "tv", "ui", "dialog", "AdBlockStatsDialog.java")));
+
+            assertTrue(layout.contains("android:id=\"@+id/logPage\""));
+            assertTrue(layout.contains("android:id=\"@+id/logRecycler\""));
+            assertTrue(layout.contains("android:id=\"@+id/chartPage\""));
+            assertTrue(layout.contains("android:id=\"@+id/chartView\""));
+            assertTrue(layout.contains("com.fongmi.android.tv.widget.AdBlockChartView"));
+            assertTrue(dialog.contains("binding.chartView.setEntries"));
+            assertTrue(dialog.contains("R.string.ad_stats_log"));
+            assertTrue(dialog.contains("R.string.ad_stats_chart"));
+            assertTrue(dialog.contains("binding.logPage.setVisibility"));
+            assertTrue(dialog.contains("binding.chartPage.setVisibility"));
+        }
+    }
+
+    @Test
+    public void blockLogUsesARealTableWithEveryRequestedFieldForBothFlavors() throws Exception {
+        Path root = findRepositoryRoot();
+        for (String flavor : new String[] {"mobile", "leanback"}) {
+            String dialogLayout = read(root.resolve(Path.of("app", "src", flavor, "res", "layout", "dialog_ad_block_stats.xml")));
+            String rowLayout = read(root.resolve(Path.of("app", "src", flavor, "res", "layout", "adapter_ad_block_log.xml")));
+            String dialogSource = read(root.resolve(Path.of("app", "src", flavor, "java", "com", "fongmi", "android", "tv", "ui", "dialog", "AdBlockStatsDialog.java")));
+
+            assertTrue(dialogLayout.contains("android:id=\"@+id/logTableScroll\""));
+            assertTrue(dialogLayout.contains("@string/ad_log_site_name"));
+            assertTrue(dialogLayout.contains("@string/ad_log_site_domain"));
+            assertTrue(dialogLayout.contains("@string/ad_log_rule_domain"));
+            assertTrue(dialogLayout.contains("@string/ad_log_blocked_at"));
+            assertTrue(dialogLayout.contains("@string/ad_log_segment_start"));
+            assertTrue(dialogLayout.contains("@string/ad_log_segment_end"));
+            assertTrue(dialogLayout.contains("@string/ad_log_segment_duration"));
+            assertTrue(dialogLayout.contains("android:id=\"@+id/logRecycler\""));
+            assertTrue(dialogLayout.contains("android:layout_width=\"1660dp\""));
+            assertTrue(rowLayout.contains("android:id=\"@+id/siteName\"") && rowLayout.contains("android:textStyle=\"bold\""));
+            assertTrue(rowLayout.contains("android:id=\"@+id/siteDomain\""));
+            assertTrue(rowLayout.contains("android:id=\"@+id/ruleDomain\""));
+            assertTrue(rowLayout.contains("android:id=\"@+id/blockedAt\""));
+            assertTrue(rowLayout.contains("android:id=\"@+id/segmentStart\""));
+            assertTrue(rowLayout.contains("android:id=\"@+id/segmentEnd\""));
+            assertTrue(rowLayout.contains("android:id=\"@+id/segmentDuration\""));
+            assertTrue(dialogSource.contains("AdapterAdBlockLogBinding.inflate"));
+            assertTrue(dialogSource.contains("getSegmentEndSeconds()"));
+            assertTrue(dialogSource.contains("segmentDuration.setText(item.hasSegmentTiming()"));
+        }
+    }
+
+    @Test
+    public void rankingTabsSupportExpandingGroupedBlockLogsForBothFlavors() throws Exception {
+        Path root = findRepositoryRoot();
+        for (String flavor : new String[] {"mobile", "leanback"}) {
+            String dialog = read(root.resolve(Path.of("app", "src", flavor, "java", "com", "fongmi", "android", "tv", "ui", "dialog", "AdBlockStatsDialog.java")));
+
+            assertTrue(dialog.contains("class ExpandableLogAdapter"));
+            assertTrue(dialog.contains("getBlockLogsBySource"));
+            assertTrue(dialog.contains("getBlockLogsBySite"));
+            assertTrue(dialog.contains("getBlockLogsByRule"));
+            assertTrue(dialog.contains("getBlockLogsByPipeline"));
+            assertTrue(dialog.contains("itemView.setOnClickListener"));
+        }
+    }
+
+    @Test
     public void mobileStatsDialogUsesReadableTextOnWhiteSurface() throws Exception {
         Path root = findRepositoryRoot();
         String dialog = read(root.resolve(Path.of("app", "src", "mobile", "res", "layout", "dialog_ad_block_stats.xml")));
@@ -103,6 +169,15 @@ public class AdBlockStatsDialogLayoutTest {
         assertTrue("White dialog surface must not use translucent white secondary text",
                 !dialog.contains("android:textColor=\"@color/white_50\"")
                         && !item.contains("android:textColor=\"@color/white_50\""));
+    }
+
+    @Test
+    public void simplifiedChineseBlockLogUsesTheRequestedFieldLabels() throws Exception {
+        String strings = read(findRepositoryRoot().resolve(Path.of("app", "src", "main", "res", "values-zh-rCN", "strings.xml")));
+
+        assertTrue(strings.contains(">切片开始时间</string>"));
+        assertTrue(strings.contains(">切片结束时间</string>"));
+        assertTrue(strings.contains(">切片时长</string>"));
     }
 
     @Test

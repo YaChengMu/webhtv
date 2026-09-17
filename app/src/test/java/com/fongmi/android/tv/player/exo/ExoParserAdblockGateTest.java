@@ -15,7 +15,8 @@ public class ExoParserAdblockGateTest {
     public void parserAdblockRequiresConfiguredRules() throws Exception {
         String source = Files.readString(Path.of("src/main/java/com/fongmi/android/tv/player/exo/ExoUtil.java"));
 
-        assertTrue(source.contains("Setting.isAdblock() && !HlsRuleConfig.getRules().isEmpty()"));
+        assertTrue(source.contains("Setting.isAdblock() && !HlsRuleConfig.getRules().isEmpty()")
+                && source.contains("&& HlsRuleConfig.isLegacyFallbackEnabled()"));
         assertFalse(source.contains("builder.setAdblock(Setting.isAdblock())"));
     }
 }
