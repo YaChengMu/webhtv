@@ -304,6 +304,185 @@
                 android:overScrollMode="never"
                 app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
         </androidx.appcompat.widget.LinearLayoutCompat>
+
+        <androidx.appcompat.widget.LinearLayoutCompat
+            android:id="@+id/logPage"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:padding="16dp"
+            android:visibility="gone">
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/logEmpty"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/ad_stats_empty"
+                android:textColor="#5F6368"
+                android:textSize="15sp"
+                android:visibility="gone" />
+            <HorizontalScrollView
+                android:id="@+id/logTableScroll"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:fillViewport="false"
+                android:overScrollMode="never">
+
+                <androidx.appcompat.widget.LinearLayoutCompat
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:orientation="vertical">
+
+        <androidx.appcompat.widget.LinearLayoutCompat
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:background="@color/black_10"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+            <com.google.android.material.textview.MaterialTextView
+                android:layout_width="220dp"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textColor="@color/dialog_outlined_button_text"
+                android:textSize="13sp"
+                android:text="@string/ad_log_site_name"
+                android:textStyle="bold" />
+            <com.google.android.material.textview.MaterialTextView
+                android:layout_width="190dp"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textColor="@color/dialog_outlined_button_text"
+                android:textSize="13sp"
+                android:text="@string/ad_log_site_domain"
+                android:textStyle="bold" />
+            <com.google.android.material.textview.MaterialTextView
+                android:layout_width="260dp"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textColor="@color/dialog_outlined_button_text"
+                android:textSize="13sp"
+                android:text="@string/ad_log_playback_context"
+                android:textStyle="bold" />
+            <com.google.android.material.textview.MaterialTextView
+                android:layout_width="340dp"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textColor="@color/dialog_outlined_button_text"
+                android:textSize="13sp"
+                android:text="@string/ad_log_rule_domain"
+                android:textStyle="bold" />
+            <com.google.android.material.textview.MaterialTextView
+                android:layout_width="180dp"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textColor="@color/dialog_outlined_button_text"
+                android:textSize="13sp"
+                android:text="@string/ad_log_blocked_at"
+                android:textStyle="bold" />
+            <com.google.android.material.textview.MaterialTextView
+                android:layout_width="120dp"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textColor="@color/dialog_outlined_button_text"
+                android:textSize="13sp"
+                android:text="@string/ad_log_segment_start"
+                android:textStyle="bold" />
+            <com.google.android.material.textview.MaterialTextView
+                android:layout_width="120dp"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textColor="@color/dialog_outlined_button_text"
+                android:textSize="13sp"
+                android:text="@string/ad_log_segment_end"
+                android:textStyle="bold" />
+            <com.google.android.material.textview.MaterialTextView
+                android:layout_width="130dp"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textColor="@color/dialog_outlined_button_text"
+                android:textSize="13sp"
+                android:text="@string/ad_log_segment_duration"
+                android:textStyle="bold" />
+            <com.google.android.material.textview.MaterialTextView
+                android:layout_width="100dp"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textColor="@color/dialog_outlined_button_text"
+                android:textSize="13sp"
+                android:text="@string/ad_log_pipeline"
+                android:textStyle="bold" />
+        </androidx.appcompat.widget.LinearLayoutCompat>
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/logRecycler"
+                        android:layout_width="1660dp"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
+                        android:overScrollMode="never"
+                        app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
+                </androidx.appcompat.widget.LinearLayoutCompat>
+            </HorizontalScrollView>
+        </androidx.appcompat.widget.LinearLayoutCompat>
+
+        <androidx.appcompat.widget.LinearLayoutCompat
+            android:id="@+id/chartPage"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:padding="16dp"
+            android:visibility="gone">
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/chartEmpty"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/ad_stats_empty"
+                android:textColor="#5F6368"
+                android:textSize="15sp"
+                android:visibility="gone" />
+            <com.fongmi.android.tv.widget.AdBlockChartView
+                android:id="@+id/chartView"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp" />
+        </androidx.appcompat.widget.LinearLayoutCompat>
     </FrameLayout>
 
     <View

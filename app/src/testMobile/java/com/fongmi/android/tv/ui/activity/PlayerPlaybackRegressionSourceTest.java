@@ -12,6 +12,19 @@ import static org.junit.Assert.assertTrue;
 public class PlayerPlaybackRegressionSourceTest {
 
     @Test
+    public void episodeNavigationUsesTheFullFlagListAcrossRangePages() throws Exception {
+        String mobile = readMobileJava("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java");
+        int adjacent = mobile.indexOf("private Episode getAdjacentEpisode(int offset)");
+        int adjacentEnd = mobile.indexOf("\n    private ", adjacent + 1);
+        String adjacentBlock = mobile.substring(adjacent, adjacentEnd);
+
+        assertTrue("range-paged episode navigation must resolve adjacent episodes from the full selected flag",
+                adjacentBlock.contains("getFlag().getEpisodes()"));
+        assertFalse("range-paged episode navigation must not stop at the currently displayed page",
+                adjacentBlock.contains("mEpisodeAdapter.getItems()"));
+    }
+
+    @Test
     public void customPlayerButtonOrderPreservesSpacerAndRefreshesVisibleFocusChain() throws Exception {
         String source = readMainJava("com", "fongmi", "android", "tv", "setting", "PlayerButtonSetting.java");
         int applyOrder = source.indexOf("public static void applyOrder(ViewGroup container, Map<String, View> views)");

@@ -14,6 +14,17 @@ import static org.junit.Assert.assertTrue;
 public class TmdbDetailActivityLayoutTest {
 
     @Test
+    public void defaultPosterRailLeavesRoomForTheFullRoundedPosterCard() throws Exception {
+        String source = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
+        String defaultTemplate = javaBlockAt(source, "private void applyDefaultDetailTemplate()");
+
+        assertTrue("default detail modes must leave room for the full 222dp rounded card and focus scaling",
+                defaultTemplate.contains("TmdbDetailLayoutUtils.setHeightDp(binding.posterList, 238);")
+                        && defaultTemplate.contains("binding.posterList.setClipToOutline(false);")
+                        && defaultTemplate.contains("binding.posterList.setClipChildren(false);"));
+    }
+
+    @Test
     public void cinemaPosterRailLeavesRoomForTheFullRoundedPosterCard() throws Exception {
         String source = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
         String cinemaTemplate = javaBlockAt(source, "private void applyCinemaDetailTemplate()");
@@ -41,6 +52,23 @@ public class TmdbDetailActivityLayoutTest {
 
         assertTrue("cinema still cards are 124dp high, so their rail must not reserve a larger empty bottom area before posters",
                 cinemaTemplate.contains("TmdbDetailLayoutUtils.setHeightDp(binding.episodePhotoList, 124);"));
+    }
+
+    @Test
+    public void directPlayClearThemeUsesCompactSharedTmdbSectionGap() throws Exception {
+        String source = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
+        String refresh = javaBlockAt(source, "private void bindTmdbSection()");
+
+        assertTrue("direct-play clear theme must compact every populated TMDB rail gap while other themes retain the standard spacing",
+                refresh.contains("int sectionGapDp = isPlayerMode() && !isCinemaMode() ? 12 : 20;")
+                        && refresh.contains("binding.posterTitle, hasPhotos ? sectionGapDp : 0")
+                        && refresh.contains("binding.relatedVideoTitle, hasPhotos || hasPosters ? sectionGapDp : 0")
+                        && refresh.contains("binding.castTitle, hasPhotos || hasPosters || hasRelatedVideos ? sectionGapDp : 0")
+                        && refresh.contains("binding.creatorTitle, hasPhotos || hasPosters || hasRelatedVideos || hasCast ? sectionGapDp : 0")
+                        && refresh.contains("binding.relatedTitle, hasPhotos || hasPosters || hasRelatedVideos || hasCast || hasCreators ? sectionGapDp : 0")
+                        && refresh.contains("binding.personalTmdbTitle, hasPhotos || hasPosters || hasCast || hasCreators || hasRelated || hasRelatedVideos ? sectionGapDp : 0")
+                        && refresh.contains("binding.personalDoubanTitle, hasPhotos || hasPosters || hasCast || hasCreators || hasRelated || hasRelatedVideos || hasPersonalTmdb ? sectionGapDp : 0")
+                        && refresh.contains("binding.personalAiTitle, hasPhotos || hasPosters || hasCast || hasCreators || hasRelated || hasRelatedVideos || hasPersonalTmdb || hasPersonalDouban ? sectionGapDp : 0"));
     }
 
     @Test
@@ -3082,11 +3110,16 @@ public class TmdbDetailActivityLayoutTest {
         String stopBody = source.substring(stop, start);
         String startBody = source.substring(start, source.indexOf("private void searchInlineDanmaku", start));
 
-        assertTrue("current inline episode clicks must reuse playback before fusion reloads",
-                onPlayBody.indexOf("enterInlineFullscreenIfCurrentInlinePlayback(selectedEpisode)") < onPlayBody.indexOf("modeController.play();"));
-        assertTrue("detail-player fullscreen entry must not reload the already playing episode",
+        int reuseCurrentPlayback = onPlayBody.indexOf("enterInlineFullscreenIfCurrentInlinePlayback(selectedEpisode)");
+        int delegatedPlay = onPlayBody.indexOf("modeController.play();");
+        assertTrue("current inline episode clicks must reuse playback before delegated playback",
+                reuseCurrentPlayback >= 0 && delegatedPlay >= 0 && reuseCurrentPlayback < delegatedPlay);
+        int enterFullscreen = detailBody.indexOf("enterInlineFullscreen();");
+        int startPlayback = detailBody.indexOf("if (!current) playInline();");
+        assertTrue("detail-player fullscreen entry must be immediate and must not reload the already playing episode",
                 detailBody.contains("boolean current = isCurrentInlinePlayback(selectedEpisode);")
-                        && detailBody.contains("if (!current) playInline();"));
+                        && enterFullscreen >= 0
+                        && startPlayback > enterFullscreen);
         assertTrue("current inline playback identity must include episode, site key, and line flag",
                 source.contains("private Episode inlinePlaybackEpisode;")
                         && source.contains("private String inlinePlaybackKey = \"\";")
