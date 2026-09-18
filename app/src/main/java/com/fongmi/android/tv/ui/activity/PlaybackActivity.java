@@ -970,6 +970,7 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
             if (shutter != null) shutter.setVisibility(View.INVISIBLE);
             getExoView().setShutterBackgroundColor(Color.TRANSPARENT);
             PlaybackActivity.this.onExoFirstFrame();
+            PlaybackActivity.this.onFirstFrameRendered();
         }
 
         @Override

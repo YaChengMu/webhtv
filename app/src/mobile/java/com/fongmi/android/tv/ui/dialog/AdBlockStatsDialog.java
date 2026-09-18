@@ -17,6 +17,7 @@ import com.fongmi.android.tv.bean.RuleHitRecord;
 import com.fongmi.android.tv.databinding.AdapterAdBlockLogBinding;
 import com.fongmi.android.tv.databinding.DialogAdBlockStatsBinding;
 import com.fongmi.android.tv.impl.Callback;
+import com.fongmi.android.tv.utils.AdBlockTimeFormatter;
 import com.fongmi.android.tv.widget.AdBlockChartView;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
@@ -514,7 +515,7 @@ public class AdBlockStatsDialog {
         }
 
         private static String seconds(double value) {
-            return String.format(Locale.getDefault(), "%.1f s", value);
+            return AdBlockTimeFormatter.formatSeconds(value);
         }
 
         private static String value(String value, String fallback) {
