@@ -86,3 +86,64 @@
 ### 复评结论
 
 同步内容与 `dev3` 当前站点健康统计、HLS 去广告兼容逻辑可以共存。本轮发现的两个缓存/排序遗漏均已修复并由 Mobile 与 Leanback 两个变体的定向测试覆盖，可以进入提交、推送及创建合入 `beta` 的拉取请求阶段。
+
+## 最新 beta 同步与未推送播放修复复评（2026-09-18 晚间）
+
+### 同步基线
+
+- 工作分支：`dev3`
+- 同步前提交：`fe88163cf750e62b8aa664c74334955c59dfda54`
+- 同步的远端 `beta`：`32a52698e5dab09fe18e49d18849a947057ca717`
+- 合并共同祖先：`533d3bf18d44cede36b0bd43cadb436c1ef3f481`
+- 合并方式：保留双方历史的 `--no-commit --no-ff` 合并，完成后由任务守卫形成合并提交。
+
+### 冲突与合并处理
+
+- `ExoPlayerEngine.java` 与 `ExoUtil.java` 发生内容冲突。
+- `beta` 侧新增 ASS 会话、双字幕会话和诊断包装；`dev3` 未推送提交新增播放媒体时钟、PCM 信号管线和音频处理器接入。
+- 两者位于不同职责层，现已统一为一个完整播放器构建调用链，同时传递 `assSession`、`subtitleSession`、`mediaSignals` 和 `mediaClock`。
+- 保留原有短参数重载并让它们委托到完整实现，避免其他 Exo 调用路径失去兼容性。
+- 音频输出保留 `beta` 的诊断 Provider/Sink 包装，同时在其内部接入本地媒体时钟管线和音频采样处理器。
+
+### 第一轮评审
+
+- 发现首次手工合并后的播放器构建参数数量错误，主代码编译能够直接暴露该问题；已补齐完整参数顺序并清理全部冲突标记。
+- 复核两笔未推送播放修复：重复请求取消、首帧稳定窗口、预加载分段间隔均仍作用于最终合并树。
+- 复核 `PlayerManager` 创建 Exo 引擎时使用的播放媒体信号与时钟实例，和 `ExoUtil` 最终重载参数一致。
+- 未发现 beta 新增 ASS/双字幕能力被本地改动覆盖，也未发现本地预加载节流被 beta 自动合并删除。
+
+### 第一轮验证
+
+执行：
+
+```text
+bash ./gradlew --console=plain \
+  :app:compileLeanbackArm64_v8aDebugJavaWithJavac
+```
+
+结果：`BUILD SUCCESSFUL in 1m 2s`，47 个 actionable tasks。
+
+执行：
+
+```text
+bash ./gradlew --console=plain \
+  :app:testLeanbackArm64_v8aDebugUnitTest \
+  --tests com.fongmi.android.tv.player.exo.PreCachePolicyTest \
+  --tests com.fongmi.android.tv.ui.activity.ReaderPlaybackRoutingSourceTest \
+  --tests com.fongmi.android.tv.player.exo.ExoCompressedAudioDirectPolicyTest \
+  --tests com.fongmi.android.tv.player.exo.ExoAudioOutputStateTest
+```
+
+结果：`BUILD SUCCESSFUL in 22s`，87 个 actionable tasks，15 executed、72 up-to-date。
+
+### 第二轮复评
+
+- 以最终工作树对照 `origin/beta` 复核，差异仅剩 9 个预期本地文件：播放修复、预加载节流、对应测试及本评审文档。
+- 重新检查 `ExoPlayerEngine` 两个构建入口和 `ExoUtil` 全部重载，均最终落到同一个完整实现。
+- 重新检查预加载 `check -> update -> schedule -> finishTask` 状态流，完成分段后的 5 秒间隔不会影响前台 buffering、seek 或暂停处理路径。
+- 未发现正确性、兼容性、性能、生命周期或回滚问题，复评通过。
+
+### 回滚方式
+
+- 回滚本轮 beta 同步：对任务守卫生成的合并提交执行 `git revert -m 1 <merge-commit>`。
+- 单独回滚未推送播放修复：恢复 `PreCache`、`PreCachePolicy`、`ExoPlayerEngine`、`ExoUtil`、`PlayerManager` 与 TV `VideoActivity` 的相关改动，并删除对应源码约束测试。

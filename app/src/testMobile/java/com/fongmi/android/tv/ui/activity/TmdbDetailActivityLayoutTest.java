@@ -14,6 +14,22 @@ import static org.junit.Assert.assertTrue;
 public class TmdbDetailActivityLayoutTest {
 
     @Test
+    public void returningFromExternalPlaybackRefreshesTheSelectedEpisodeFromHistory() throws Exception {
+        String source = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
+        String onResume = javaBlockAt(source, "protected void onResume()");
+        String refresh = javaBlockAt(source, "private void refreshSelectionAfterExternalPlayback()");
+
+        assertTrue("onResume must refresh the detail selection after an external VideoActivity returns",
+                onResume.contains("refreshSelectionAfterExternalPlayback();"));
+        assertTrue("external playback refresh must reload history and redraw the episode selection",
+                refresh.contains("history = History.findPlayback(")
+                        && refresh.contains("selectedFlag = TmdbUIAdapter.selectPlaybackFlag(")
+                        && refresh.contains("selectedEpisode = findEpisodeByUrl(history.getEpisodeUrl(), selectedFlag.getEpisodes());")
+                        && refresh.contains("renderFlagSelection();")
+                        && refresh.contains("renderEpisodes();"));
+    }
+
+    @Test
     public void defaultPosterRailLeavesRoomForTheFullRoundedPosterCard() throws Exception {
         String source = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
         String defaultTemplate = javaBlockAt(source, "private void applyDefaultDetailTemplate()");
@@ -2222,6 +2238,7 @@ public class TmdbDetailActivityLayoutTest {
                 "adapter_tmdb_person_photo.xml",
                 "adapter_tmdb_rail_item.xml",
                 "adapter_tmdb_rail_landscape.xml",
+                "adapter_tmdb_recommendation.xml",
                 "adapter_tmdb_recommendation_landscape.xml",
                 "adapter_tmdb_work.xml",
                 "item_tmdb_person_photo.xml",
@@ -3482,6 +3499,7 @@ public class TmdbDetailActivityLayoutTest {
         assertTrue("unmapped cards and API failures must still open a source detail dialog",
                 detail.contains("if (boundTmdbEpisode == null)")
                         && detail.contains("EpisodeDetailDialog.show(this, episode, getSite(), null, null, dismissListener);")
+                        && detail.contains("EpisodeDetailDialog.show(this, episode, boundTmdbEpisode, getSite(), null, null, dismissListener);")
                         && detail.contains("if (!isTmdbEpisodeDetailSeasonCurrent(displaySeasonNumber)) return;"));
     }
 
