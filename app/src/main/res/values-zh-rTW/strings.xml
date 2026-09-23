@@ -2644,7 +2644,7 @@
     <string name="ad_audio_skipped_title">已略過廣告</string>
     <string name="ad_audio_skipped_message">可在 %1$d 秒內復原。</string>
     <string name="ad_audio_undo">復原</string>
-    <string name="setting_ad_audio_title">音訊指紋去廣告（實驗）</string>
+    <string name="setting_ad_audio_title">音訊指紋去廣告（實驗性：開啟後可能導致播放失敗或掉幀）</string>
     <string name="setting_ad_audio_no_rules">無規則</string>
     <string name="setting_ad_audio_rule_error">規則錯誤</string>
     <string name="setting_ad_audio_rule_count">規則 %1$d · %2$s</string>
@@ -2686,7 +2686,7 @@
     <string name="download_delete_episode">確定刪除該集？</string>
     <string name="download_delete_group">確定刪除該劇全部已下載緩存？</string>
     <string name="download_long_press_tip">點擊可暫停/繼續，長按刪除</string>
-    <string name="speech_ad_enabled">語音廣告識別</string>
+    <string name="speech_ad_enabled">語音廣告識別（實驗性：開啟後可能導致播放失敗或掉幀）</string>
     <string name="speech_ad_keywords">廣告關鍵詞</string>
     <string name="speech_ad_keyword_count">%1$d 個關鍵詞</string>
     <string name="speech_ad_rules">語音規則</string>
