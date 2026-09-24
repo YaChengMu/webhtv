@@ -7495,6 +7495,10 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         return getIntent().getBooleanExtra("auto_play", false);
     }
 
+    private boolean isFusionMode() {
+        return modeController != null && modeController.isFusionMode();
+    }
+
     private boolean shouldUseLoadingOnlyBeforeDefaultPlayback() {
         return isAutoPlayMode() && !modeController.isFusionMode() && !modeController.isPlayerMode();
     }
