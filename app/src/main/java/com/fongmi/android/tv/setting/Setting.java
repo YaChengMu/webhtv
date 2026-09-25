@@ -898,6 +898,14 @@ public class Setting {
         Prefers.put("theme_color", color);
     }
 
+    public static boolean isThemeColorEnabled() {
+        return Prefers.getBoolean("theme_color_enabled");
+    }
+
+    public static void putThemeColorEnabled(boolean enabled) {
+        Prefers.put("theme_color_enabled", enabled);
+    }
+
     public static int getWallColor() {
         return Prefers.getInt("wall_color", 0);
     }
@@ -1330,11 +1338,17 @@ public class Setting {
     }
 
     public static int getGlobalHistoryMode() {
-        return clampGlobalHistoryMode(Prefers.getInt("global_history_mode", GLOBAL_HISTORY_OFF));
+        // Read the raw value so a legacy Boolean can be migrated without
+        // mistaking an Integer 0 for Boolean false during app startup.
+        Object value = Prefers.getPrefers().getAll().get("global_history_mode");
+        if (value instanceof Boolean legacy) return legacy ? GLOBAL_HISTORY_AUTO : GLOBAL_HISTORY_OFF;
+        if (value instanceof Number number) return clampGlobalHistoryMode(number.intValue());
+        return GLOBAL_HISTORY_OFF;
     }
 
     public static void putGlobalHistoryMode(int mode) {
-        Prefers.put("global_history_mode", clampGlobalHistoryMode(mode));
+        mode = clampGlobalHistoryMode(mode);
+        Prefers.put("global_history_mode", mode == GLOBAL_HISTORY_OFF ? -1 : mode);
     }
 
     public static int getInterfaceFailoverMode() {

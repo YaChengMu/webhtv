@@ -42,6 +42,7 @@ import com.fongmi.android.tv.bean.Style;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.ActivityHomeBinding;
 import com.fongmi.android.tv.db.AppDatabase;
+import com.fongmi.android.tv.setting.ConfigSyncPolicy;
 import com.fongmi.android.tv.event.CastEvent;
 import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
@@ -100,6 +101,7 @@ import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
@@ -423,7 +425,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     private void clearCategoryContent() {
         invalidatePendingFocusRequests();
         mBinding.typeRecycler.removeCallbacks(mTypeSwitch);
-        mPendingTypePosition = -1;
+        clearStaleSiteTypes();
         mCurrentType = null;
         mFolder = null;
         mBinding.progressLayout.setVisibility(View.VISIBLE);
@@ -437,6 +439,14 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
             transaction.remove(fragment);
         }
         if (transaction != null) transaction.commit();
+    }
+
+    private void clearStaleSiteTypes() {
+        // Site switching starts asynchronously. Remove the old type row immediately so stale
+        // category buttons cannot be mistaken for the newly selected site during loading.
+        mTypeAdapter.addAll(Collections.emptyList());
+        mPendingTypePosition = -1;
+        mBinding.typeRecycler.setVisibility(View.GONE);
     }
 
     private void updateToolbarVisibility(boolean visible) {
@@ -703,7 +713,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
 
     private void setTypes(Result result) {
         if (result.getTypes().isEmpty()) {
-            mTypeAdapter.addAll(java.util.Collections.emptyList());
+            mTypeAdapter.addAll(Collections.emptyList());
             mBinding.typeRecycler.setVisibility(View.GONE);
             showHomeContent();
             return;
@@ -1143,10 +1153,18 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     public void setConfig(Config config) {
         if (config.getType() != 0) return;
         if (config.getUrl().startsWith("file")) {
-            PermissionUtil.requestFile(this, allGranted -> VodConfig.load(config, getCallback()));
+            PermissionUtil.requestFile(this, allGranted -> loadVodConfig(config));
         } else {
-            VodConfig.load(config, getCallback());
+            loadVodConfig(config);
         }
+    }
+
+    private void loadVodConfig(Config config) {
+        String previousVodUrl = VodConfig.getUrl();
+        VodConfig.load(config, getCallback());
+        if (!ConfigSyncPolicy.shouldSyncLive(previousVodUrl, LiveConfig.getUrl())) return;
+        Config liveConfig = AppDatabase.get().getConfigDao().find(config.getUrl(), 1);
+        if (liveConfig != null) LiveConfig.load(liveConfig, new Callback());
     }
 
     @Override
