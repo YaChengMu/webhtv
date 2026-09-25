@@ -9,6 +9,7 @@ import com.fongmi.android.tv.api.config.WallConfig;
 import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.db.AppDatabase;
+import com.fongmi.android.tv.setting.ConfigSyncPolicy;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.remote.RemoteModels.RemoteCommandResult;
 import com.google.gson.JsonArray;
@@ -39,8 +40,10 @@ public final class RemoteConfigOps {
         Config config = TextUtils.isEmpty(interfaceKey)
                 ? Config.find(url, type)
                 : AppDatabase.get().getConfigDao().findByInterfaceKey(interfaceKey, type);
+        if (config == null) config = findByAddressAlias(payload, type);
         if (config == null) config = Config.create(type);
         config.interfaceKey(interfaceKey).mergeUrls(urls(payload)).url(url).name(name).save();
+        com.fongmi.android.tv.playback.PlaybackIdentityResolver.resolveSaved(config);
         return RemoteCommandResult.success("Config saved", data());
     }
 
@@ -49,12 +52,22 @@ public final class RemoteConfigOps {
         String url = string(payload, "url");
         Config config = findConfig(payload, type);
         if (config == null || config.isEmpty()) return RemoteCommandResult.failure("Config not found");
+        String previousVodUrl = type == 0 ? VodConfig.getUrl() : null;
+        Config liveConfig = type == 0 ? matchingLiveConfig(config, previousVodUrl) : null;
         App.post(() -> {
             if (type == 1) LiveConfig.load(config, new Callback());
             else if (type == 2) WallConfig.load(config, new Callback());
-            else VodConfig.load(config, new Callback());
+            else {
+                VodConfig.load(config, new Callback());
+                if (liveConfig != null) LiveConfig.load(liveConfig, new Callback());
+            }
         });
         return RemoteCommandResult.success("Config switched", data());
+    }
+
+    private static Config matchingLiveConfig(Config config, String previousVodUrl) {
+        if (!ConfigSyncPolicy.shouldSyncLive(previousVodUrl, LiveConfig.getUrl())) return null;
+        return AppDatabase.get().getConfigDao().find(config.getUrl(), 1);
     }
 
     public static RemoteCommandResult delete(JsonObject payload) {
@@ -63,6 +76,21 @@ public final class RemoteConfigOps {
         if (config == null || config.isEmpty()) return RemoteCommandResult.failure("Config not found");
         config.delete();
         return RemoteCommandResult.success("Config deleted", data());
+    }
+
+    private static Config findByAddressAlias(JsonObject payload, int type) {
+        for (Config config : Config.getAll(type)) {
+            for (String alias : strings(payload, "addressMatchAliases")) if (config.getAddressMatchAliases().contains(alias)) return config;
+        }
+        return null;
+    }
+
+    private static List<String> strings(JsonObject payload, String key) {
+        List<String> result = new ArrayList<>();
+        JsonElement element = payload == null ? null : payload.get(key);
+        if (element == null || !element.isJsonArray()) return result;
+        for (JsonElement item : element.getAsJsonArray()) if (item != null && item.isJsonPrimitive()) result.add(item.getAsString());
+        return result;
     }
 
     private static Config findConfig(JsonObject payload, int type) {

@@ -10,6 +10,7 @@ import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Backup;
 import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.db.AppDatabase;
+import com.fongmi.android.tv.setting.ConfigSyncPolicy;
 import com.fongmi.android.tv.bean.Device;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.bean.SyncOptions;
@@ -353,6 +354,7 @@ public class Manage implements Process {
                     : AppDatabase.get().getConfigDao().findByInterfaceKey(interfaceKey, type);
             if (config == null) config = Config.create(type);
             config.interfaceKey(interfaceKey).url(url).name(name).save();
+            com.fongmi.android.tv.playback.PlaybackIdentityResolver.resolveSaved(config);
         }
         JsonObject object = new JsonObject();
         JsonArray items = new JsonArray();
@@ -372,7 +374,14 @@ public class Manage implements Process {
         switch (type) {
             case 1 -> LiveConfig.load(config, new Callback());
             case 2 -> WallConfig.load(config, new Callback());
-            default -> VodConfig.load(config, new Callback());
+            default -> {
+                String previousVodUrl = VodConfig.getUrl();
+                VodConfig.load(config, new Callback());
+                if (ConfigSyncPolicy.shouldSyncLive(previousVodUrl, LiveConfig.getUrl())) {
+                    Config liveConfig = AppDatabase.get().getConfigDao().find(config.getUrl(), 1);
+                    if (liveConfig != null) LiveConfig.load(liveConfig, new Callback());
+                }
+            }
         }
         return configs(java.util.Collections.emptyMap());
     }
@@ -403,6 +412,9 @@ public class Manage implements Process {
         item.addProperty("url", config.getUrl());
         item.addProperty("interfaceKey", config.ensureInterfaceKey());
         item.add("urls", App.gson().toJsonTree(config.getUrls()));
+        item.add("legacyConfigKeys", App.gson().toJsonTree(config.getLegacyConfigKeys()));
+        item.add("addressMatchAliases", App.gson().toJsonTree(config.getAddressMatchAliases()));
+        item.addProperty("identityResolutionState", config.getIdentityResolutionState());
         item.addProperty("desc", config.getDesc());
         item.addProperty("time", config.getTime());
         item.addProperty("active", forceActive || isCurrentConfig(config));
