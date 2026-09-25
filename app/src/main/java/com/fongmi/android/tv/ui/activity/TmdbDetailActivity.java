@@ -10223,8 +10223,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         ViewGroup.LayoutParams sp = binding.playerPanelSpacer.getLayoutParams();
         if (sp == null) return;
         int target = ResUtil.dp2px(modeController.isFusionMode()? 0 : 252);
-        int topMargin = ResUtil.dp2px(modeController.isFusionMode() ? 22 : 14);
-        int bottomMargin = ResUtil.dp2px(modeController.isFusionMode() ? 20 : 16);
+        int topMargin = ResUtil.dp2px(modeController.isFusionMode() ? 0 : 14);
+        int bottomMargin = ResUtil.dp2px(modeController.isFusionMode() ? 0 : 16);
         boolean changed = sp.height != target;
         if (sp instanceof ViewGroup.MarginLayoutParams marginParams) {
             if (marginParams.topMargin != topMargin || marginParams.bottomMargin != bottomMargin) {
