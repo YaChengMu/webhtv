@@ -11988,6 +11988,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private void wireInlineQuickSearchExtras(Class<?> dialogClass, Object dialog) {
         invokeQuiet(dialog, "title", new Class<?>[]{String.class}, getString(R.string.play_search) + " " + inlineSearchKeyword);
         invokeQuiet(dialog, "keyword", new Class<?>[]{String.class}, inlineSearchKeyword);
+        invokeQuiet(dialog, "currentSiteKey", new Class<?>[]{String.class}, getKeyText());
         // 手机版：弹层内改关键词重搜 + 自有 dismiss 接口
         bindProxyListener(dialogClass, dialog, "searchListener", dialogClass.getName() + "$OnSearchListener",
                 args -> restartInlineSourceSearch(args == null || args.length != 1 ? "" : String.valueOf(args[0])));
