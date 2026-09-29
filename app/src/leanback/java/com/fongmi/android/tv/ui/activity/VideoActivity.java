@@ -348,6 +348,10 @@ private boolean runtimeSourceOnly;
     private static final int TMDB_OVERVIEW_ROW_GAP_DP = 12;
     private static final int TMDB_OVERVIEW_BOTTOM_GUARD_DP = 6;
     private static final int OMDB_FULL_RATING_TEXT_MAX_LENGTH = 20;
+    // 原生增强播放页统一焦点规范，取值与 app/src/main/res/drawable/selector_video_item.xml 一致：
+    // 焦点 3dp @color/tv_item_focus_ring，当前播放 2dp @color/tv_item_current_ring，常态 1dp @color/tv_item_normal_stroke。
+    private static final int TV_ITEM_FOCUS_WIDTH_DP = 3;
+    private static final int TV_ITEM_NORMAL_WIDTH_DP = 1;
     private static final String EXTRA_TMDB_PLAY_FLAG = "tmdb_play_flag";
     private static final String EXTRA_TMDB_PLAY_FLAG_KEY = "tmdb_play_flag_key";
     private static final String EXTRA_TMDB_PLAY_EPISODE_NAME = "tmdb_play_episode_name";
@@ -3922,6 +3926,7 @@ private boolean runtimeSourceOnly;
                 R.id.episodeFileName,
                 R.id.episode,
                 R.id.episodeGrid,
+                R.id.tmdbOmdbRatings,
                 R.id.tmdbCast,
                 R.id.tmdbPhotos,
                 R.id.tmdbPosters,
@@ -3952,7 +3957,26 @@ private boolean runtimeSourceOnly;
         updateEpisodeHeaderFocus();
         mPartAdapter.setNextFocus(findFocusUp(part), findFocusDown(part));
         mQuickAdapter.setNextFocus(findFocusUp(quick), findFocusDown(quick));
+        updateRatingChipFocus();
         setDetailButtonsNextFocus(findFocusDown(-1));
+    }
+
+    /**
+     * “评分与数据”卡片纳入纵向焦点链：上接选集网格/列表，下接演员行。
+     * 卡片此前不是 focusable，遥控上下键会整行跳过，视觉上凭空少了一段。
+     */
+    private void updateRatingChipFocus() {
+        ViewGroup container = mBinding.getRoot().findViewById(R.id.tmdbOmdbRatings);
+        if (container == null || !isVisible(container)) return;
+        int ratings = episodeFocusIndex(R.id.tmdbOmdbRatings);
+        int up = findFocusUp(ratings);
+        int down = findFocusDown(ratings);
+        for (int i = 0; i < container.getChildCount(); i++) {
+            View child = container.getChildAt(i);
+            if (!child.isFocusable()) continue;
+            child.setNextFocusUpId(up == 0 ? View.NO_ID : up);
+            child.setNextFocusDownId(down == 0 ? View.NO_ID : down);
+        }
     }
 
     private void updateEpisodeHeaderFocus() {
@@ -4051,8 +4075,37 @@ private boolean runtimeSourceOnly;
         if (!KeyUtil.isActionDown(event) || !KeyUtil.isDownKey(event)) return false;
         int position = mBinding.array.getSelectedPosition();
         if (position <= 1) return false;
-        selectEpisodeSegment(position, true);
+        // 只装载分段，不直接抢焦点：声明式的 nextFocusDown 目标是集数表头（“选集 · 第 N 季”），
+        // 之前这里直接 scrollToEpisode(..., true) 把焦点推进选集网格，遥控在分段行按向下
+        // 会跳过整行集数表头，用户报告“往下到不了选季度的按钮”。
+        selectEpisodeSegment(position, false);
+        if (focusEpisodeHeaderTool(View.FOCUS_DOWN)) return true;
+        scrollToEpisode(getSelectedEpisodePosition(mEpisodeAdapter.getItems()), true);
         return true;
+    }
+
+    /** 集数表头（选集 · 第 N 季 / 倒序 / 列表 / 原文件名）是分段行的声明式下方目标。 */
+    private boolean focusEpisodeHeaderTool(int direction) {
+        if (!isEpisodeFocusTarget(mBinding.episodeTitle)) return false;
+        mBinding.episodeTitle.requestFocus(direction);
+        return true;
+    }
+
+    /**
+     * “评分与数据”行是选集列表声明式的下方邻居（见 getEpisodeFocusOrders）。
+     * 集数卡片由 adapter 动态构建，不会把 nextFocusDown 写回卡片项，所以末行向下需要显式接管。
+     */
+    private boolean focusRatingRow() {
+        ViewGroup container = mBinding.getRoot().findViewById(R.id.tmdbOmdbRatings);
+        if (container == null || !isVisible(container)) return false;
+        for (int i = 0; i < container.getChildCount(); i++) {
+            View child = container.getChildAt(i);
+            if (child.isFocusable() && child.getVisibility() == View.VISIBLE) {
+                child.requestFocus(View.FOCUS_DOWN);
+                return true;
+            }
+        }
+        return false;
     }
 
 
@@ -4070,7 +4123,10 @@ private boolean runtimeSourceOnly;
             int spanCount = layoutManager instanceof GridLayoutManager gridLayoutManager ? gridLayoutManager.getSpanCount() : getEpisodeGridSpanCount();
             if (KeyUtil.isDownKey(event)) {
                 int target = TmdbEpisodeGridPolicy.verticalFocusTarget(position, spanCount, mEpisodeGridAdapter.getItemCount(), true);
-                return target != TmdbEpisodeGridPolicy.NO_FOCUS_TARGET && focusEpisodeGridPosition(target);
+                if (target != TmdbEpisodeGridPolicy.NO_FOCUS_TARGET) return focusEpisodeGridPosition(target);
+                // 已到网格最后一行：继续往下必须落到“评分与数据”，否则焦点链在选集底部断掉，
+                // 用户报告“评分与数据下的卡片无法选中容易遥控跳过”。
+                return focusRatingRow();
             }
             if (KeyUtil.isUpKey(event)) {
                 int target = TmdbEpisodeGridPolicy.verticalFocusTarget(position, spanCount, mEpisodeGridAdapter.getItemCount(), false);
@@ -6985,6 +7041,7 @@ private boolean runtimeSourceOnly;
         container.setVisibility(View.GONE);
         container.setTag(null);
         container.removeAllViews();
+        updateRatingChipFocus();
     }
 
     private String omdbRatingCacheKey(String imdbId, String omdbApiKey) {
@@ -6997,6 +7054,7 @@ private boolean runtimeSourceOnly;
         if (chips == null || chips.isEmpty()) {
             if (label != null) label.setVisibility(View.GONE);
             container.setVisibility(View.GONE);
+            updateRatingChipFocus();
             return;
         }
         for (String[] chip : chips) {
@@ -7004,6 +7062,9 @@ private boolean runtimeSourceOnly;
         }
         if (label != null) label.setVisibility(View.VISIBLE);
         container.setVisibility(View.VISIBLE);
+        // 卡片是异步到达的（OMDB 回包），到达后必须重算焦点链，
+        // 否则选集下方仍然指向旧的下一行。
+        updateRatingChipFocus();
     }
 
     private java.util.List<String[]> buildTmdbRatingChips() {
@@ -7204,12 +7265,12 @@ private boolean runtimeSourceOnly;
         chip.setGravity(android.view.Gravity.CENTER);
         chip.setMinimumWidth(ResUtil.dp2px(120));
         chip.setPadding(ResUtil.dp2px(16), ResUtil.dp2px(10), ResUtil.dp2px(16), ResUtil.dp2px(10));
-
-        android.graphics.drawable.GradientDrawable background = new android.graphics.drawable.GradientDrawable();
-        background.setColor(0x6610141A);
-        background.setCornerRadius(ResUtil.dp2px(8));
-        background.setStroke(ResUtil.dp2px(1), 0x33FFFFFF);
-        chip.setBackground(background);
+        // 评分卡片必须可被遥控选中：此前是纯装饰 LinearLayout，上下键会直接跳过整行
+        // “评分与数据”，视觉上像凭空跳了一段。
+        chip.setFocusable(true);
+        chip.setFocusableInTouchMode(false);
+        chip.setClickable(true);
+        chip.setTag(R.id.tmdbOmdbRatings, platform);
 
         TextView platformView = new TextView(this);
         platformView.setText(platform);
@@ -7241,7 +7302,31 @@ private boolean runtimeSourceOnly;
                         ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         params.setMarginEnd(ResUtil.dp2px(12));
         chip.setLayoutParams(params);
+        styleRatingChipBackground(chip, false);
+        chip.setOnFocusChangeListener((view, focused) -> styleRatingChipBackground(view, focused));
         return chip;
+    }
+
+    /**
+     * 评分卡片背景。常态保留原有深色玻璃底（0x6610141A）+ 1dp 半透明描边，
+     * 让白/黄文字在明亮剧照上依旧可读；只在获得焦点时换成统一的
+     * 3dp @color/tv_item_focus_ring 圆环，与选集/线路/推荐卡保持同一种“停下”视觉。
+     */
+    private void styleRatingChipBackground(View view, boolean focused) {
+        if (view == null) return;
+        android.graphics.drawable.GradientDrawable background = new android.graphics.drawable.GradientDrawable();
+        background.setColor(0x6610141A);
+        background.setCornerRadius(ResUtil.dp2px(8));
+        if (focused) {
+            background.setStroke(ResUtil.dp2px(TV_ITEM_FOCUS_WIDTH_DP), getColor(R.color.tv_item_focus_ring));
+        } else {
+            background.setStroke(ResUtil.dp2px(1), 0x33FFFFFF);
+        }
+        view.setBackground(background);
+        View label = mBinding.getRoot().findViewById(R.id.tmdbOmdbRatingsLabel);
+        if (label instanceof TextView text) {
+            text.setTextColor(focused ? getColor(R.color.tv_item_focus_ring) : getColor(android.R.color.white));
+        }
     }
 
     private void setupBackdropSlideshow(java.util.List<String> photos) {

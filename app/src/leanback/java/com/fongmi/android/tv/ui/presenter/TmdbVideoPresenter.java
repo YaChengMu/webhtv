@@ -13,6 +13,13 @@ import com.fongmi.android.tv.utils.ResUtil;
 
 public class TmdbVideoPresenter extends Presenter {
 
+    // 统一焦点规范（详见 resources/drawable/selector_video_item.xml）：
+    // 获得焦点 3dp @color/tv_item_focus_ring，常态 1dp @color/tv_item_normal_stroke。
+    private static final int STROKE_FOCUSED = 0xFFFFD166;
+    private static final int STROKE_NORMAL = 0x33FFFFFF;
+    private static final int STROKE_WIDTH_FOCUSED_DP = 3;
+    private static final int STROKE_WIDTH_NORMAL_DP = 1;
+
     public interface OnClickListener {
         void onItemClick(TmdbVideo item);
     }
@@ -42,8 +49,8 @@ public class TmdbVideoPresenter extends Presenter {
         holder.view.setOnFocusChangeListener((view, focused) -> {
             float scale = focused ? 1.04f : 1.0f;
             view.animate().scaleX(scale).scaleY(scale).setDuration(120).start();
-            holder.binding.getRoot().setStrokeWidth(ResUtil.dp2px(focused ? 2 : 1));
-            holder.binding.getRoot().setStrokeColor(focused ? 0xFFFFD166 : 0x33FFFFFF);
+            holder.binding.getRoot().setStrokeWidth(ResUtil.dp2px(focused ? STROKE_WIDTH_FOCUSED_DP : STROKE_WIDTH_NORMAL_DP));
+            holder.binding.getRoot().setStrokeColor(focused ? STROKE_FOCUSED : STROKE_NORMAL);
         });
     }
 
