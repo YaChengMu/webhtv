@@ -144,10 +144,80 @@ public class NativeEnhancedPlaybackStyleFocusTest {
         assertFalse("演员卡不允许再用白色焦点描边", cast.contains("STROKE_FOCUSED = 0xFFFFFFFF"));
 
         String video = read("app/src/leanback/java/com/fongmi/android/tv/ui/presenter/TmdbVideoPresenter.java");
-        assertTrue("相关视频焦点环必须是 3dp #FFD166",
-                video.contains("STROKE_FOCUSED = 0xFFFFD166") && video.contains("STROKE_WIDTH_FOCUSED_DP = 3"));
-        assertTrue("相关视频常态描边必须是 1dp #33FFFFFF",
-                video.contains("STROKE_NORMAL = 0x33FFFFFF") && video.contains("STROKE_WIDTH_NORMAL_DP = 1"));
+        // 封面 ImageView 是全出血的，卡片描边画在背景层会被封面盖住：焦点环必须走前景 selector。
+        assertTrue("相关视频必须用前景 selector 画焦点环（卡片描边会被全出血封面盖住）",
+                video.contains("R.drawable.selector_tmdb_media_focus") && video.contains("card.setForeground("));
+        // RecyclerView 复用后卡片可能已持有焦点，只挂监听拿不到回调，必须按当前状态补一次。
+        assertTrue("相关视频必须在绑定时同步当前焦点态，否则停下的卡片看不到焦点环",
+                video.contains("applyFocusChrome(holder, card.hasFocus())"));
+    }
+
+    @Test
+    public void photoCardsHaveAFocusAppearanceAtAll() throws Exception {
+        // 剧照/海报卡片此前只有卡面图片，布局关闭了系统焦点高亮且 presenter 不改描边，
+        // 遥控停下时完全没有视觉反馈，用户报告“看不出焦点到哪里”。
+        String photo = read("app/src/leanback/java/com/fongmi/android/tv/ui/presenter/TmdbPhotoPresenter.java");
+        assertTrue("剧照/海报卡片必须安装焦点前景 selector",
+                photo.contains("bindFocusStyle(") && photo.contains("R.drawable.selector_tmdb_media_focus"));
+        assertTrue("剧照/海报卡片必须在创建时按当前焦点态落地外观",
+                photo.contains("applyFocusStyle(card, card.hasFocus())"));
+        String selector = read("app/src/main/res/drawable/selector_tmdb_media_focus.xml");
+        String body = values(selector);
+        assertTrue("剧照/海报焦点环必须使用统一主题属性与 3dp",
+                body.contains("android:width=\"3dp\"") && body.contains("android:color=\"?attr/tvFocusRing\""));
+    }
+
+    @Test
+    public void everyTmdbRowCardCarriesItsOwnVerticalFocusTargets() throws Exception {
+        // 只给容器设 nextFocusDown 不够：焦点在卡片上时 Android 优先读卡片自身的声明，
+        // 否则退回几何搜索，出现“第一张剧照下不去、第二张可以”这类位置相关行为。
+        String source = read(VIDEO_ACTIVITY);
+        assertTrue("必须存在按可见行重排纵向焦点链的方法",
+                source.contains("private void applyTmdbRowFocusChain()"));
+        assertTrue("绑定完成后必须立即应用纵向焦点链",
+                source.contains("applyTmdbRowFocusChain();\n        updateFocus();"));
+        assertTrue("行内卡片必须写入自己的上下焦点目标",
+                source.contains("card.setNextFocusUpId(grid.getNextFocusUpId())")
+                        && source.contains("card.setNextFocusDownId(grid.getNextFocusDownId())"));
+        assertTrue("新接入的卡片必须补写焦点目标（RecyclerView 复用）",
+                source.contains("installRowCardFocusLinks(")
+                        && source.contains("onChildViewAttachedToWindow"));
+        assertTrue("焦点链必须跳过已隐藏的行（否则下键指向不可见 View 会退回几何搜索）",
+                source.contains("row.getVisibility() == View.VISIBLE && row.getAdapter() != null")
+                        && source.contains("row.getAdapter().getItemCount() > 0"));
+    }
+
+    @Test
+    public void everyTmdbRowHasRowHeightConfigured() throws Exception {
+        // Leanback 的 HorizontalGridView 不配置 rowHeight 时行高会塌陷为 0：
+        // 标签正常显示但卡片一张都看不到（海报行曾漏配，用户报告“海报卡片一张都没显示”）。
+        String source = read(VIDEO_ACTIVITY);
+        int start = source.indexOf("private void setupTmdbGridViews()");
+        int end = source.indexOf("private List<HorizontalGridView> tmdbMediaRows()", start);
+        assertTrue("TMDB 行初始化方法必须存在", start >= 0 && end > start);
+        String body = source.substring(start, end);
+        for (String row : new String[]{"tmdbCast", "tmdbPhotos", "tmdbPosters", "tmdbCrew", "tmdbRelatedVideos",
+                "tmdbRecommendations", "tmdbPersonalTmdbRecommendations", "tmdbPersonalDoubanRecommendations",
+                "tmdbPersonalAiRecommendations"}) {
+            assertTrue(row + " 必须配置 rowHeight，否则行高塌陷为 0、卡片不可见",
+                    body.contains("mBinding." + row + ".setRowHeight("));
+        }
+    }
+
+    @Test
+    public void posterLabelVisibilityFollowsTheSameSourceAsItsCards() throws Exception {
+        // 标签与卡片必须同源：海报列表为空时标签与行一起隐藏，不能只隐行或只隐标签。
+        String source = read(VIDEO_ACTIVITY);
+        int start = source.indexOf("// 海报", source.indexOf("private void bindTmdbData()"));
+        int end = source.indexOf("// TMDB related videos", start);
+        assertTrue("海报绑定分支必须存在", start >= 0 && end > start);
+        String body = source.substring(start, end);
+        assertTrue("海报列表非空时必须同时显示行与标签",
+                body.contains("mBinding.tmdbPosters.setVisibility(View.VISIBLE)")
+                        && body.contains("postersLabel.setVisibility(View.VISIBLE)"));
+        assertTrue("海报列表为空时必须同时隐藏行与标签",
+                body.contains("mBinding.tmdbPosters.setVisibility(View.GONE)")
+                        && body.contains("postersLabel.setVisibility(View.GONE)"));
     }
 
     // ---------------------------------------------------------------- 焦点链路
@@ -225,6 +295,24 @@ public class NativeEnhancedPlaybackStyleFocusTest {
         assertTrue("评分卡片必须在异步到达后重算焦点链",
                 source.contains("private void renderTmdbRatingChips(View label, ViewGroup container, java.util.List<String[]> chips)")
                         && source.contains("// 卡片是异步到达的（OMDB 回包），到达后必须重算焦点链，"));
+    }
+
+    @Test
+    public void ratingRowVisibilityChangesRecomputeTheRowChain() throws Exception {
+        // 评分行是 TMDB 区块第一行的 up 邻居，且是异步到达的。
+        // 若它的显隐变化不重算行链，第一行向上会指向一个已隐藏（或尚未出现）的 View，
+        // 后退回几何搜索，出现“向上/向下跑到意料之外的行”。
+        String source = read(VIDEO_ACTIVITY);
+        int hide = source.indexOf("private void hideTmdbRatingChips");
+        int render = source.indexOf("private void renderTmdbRatingChips");
+        int build = source.indexOf("private java.util.List<String[]> buildTmdbRatingChips");
+        assertTrue("两个评分渲染方法必须存在", hide >= 0 && render > hide && build > render);
+        assertTrue("隐藏评分行后必须重算行链", source.substring(hide, render).contains("applyTmdbRowFocusChain()"));
+        String renderBody = source.substring(render, build);
+        assertTrue("评分卡片为空时必须重算行链", renderBody.contains("applyTmdbRowFocusChain()"));
+        assertTrue("评分卡片到达后必须重算行链",
+                renderBody.indexOf("applyTmdbRowFocusChain()", renderBody.indexOf("container.setVisibility(View.VISIBLE)"))
+                        > renderBody.indexOf("container.setVisibility(View.VISIBLE)"));
     }
 
     private static int countOf(String source, String needle) {
