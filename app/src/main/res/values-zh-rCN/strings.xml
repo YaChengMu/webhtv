@@ -1783,6 +1783,8 @@
         <item>投屏页面</item>
         <item>收藏页面</item>
         <item>设置页面</item>
+        <item>追更页面</item>
+        <item>站点注入</item>
     </string-array>
 
     <string-array name="select_search_ui">

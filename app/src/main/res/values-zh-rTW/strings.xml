@@ -2682,6 +2682,8 @@
         <item>投屏頁面</item>
         <item>收藏頁面</item>
         <item>設置頁面</item>
+        <item>追更頁面</item>
+        <item>站點注入</item>
     </string-array>
     <string name="ad_audio_candidate_title">疑似廣告</string>
     <string name="ad_audio_match_title">已匹配音訊廣告</string>

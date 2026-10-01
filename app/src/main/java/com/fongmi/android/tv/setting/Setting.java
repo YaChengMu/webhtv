@@ -1423,7 +1423,7 @@ public class Setting {
 
     public static int getHomeMenuKey() {
         int menuKey = Prefers.getInt("home_menu_key", 0);
-        return menuKey < 0 || menuKey > 9 ? 0 : menuKey;
+        return menuKey < 0 || menuKey > 11 ? 0 : menuKey;
     }
 
     public static void putHomeMenuKey(int menuKey) {
