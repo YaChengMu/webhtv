@@ -1819,6 +1819,8 @@
         <item>Cast page</item>
         <item>Keep page</item>
         <item>Setting page</item>
+        <item>Following page</item>
+        <item>Site injection</item>
     </string-array>
 
     <string-array name="select_search_ui">
