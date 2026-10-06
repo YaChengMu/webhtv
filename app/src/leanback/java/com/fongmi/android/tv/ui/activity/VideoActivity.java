@@ -57,6 +57,7 @@ import com.fongmi.android.tv.bean.Danmaku;
 import com.fongmi.android.tv.bean.Episode;
 import com.fongmi.android.tv.bean.EpisodePositionCache;
 import com.fongmi.android.tv.bean.Flag;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.ui.helper.EpisodeSeasonSnapshot;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.bean.Keep;
@@ -1232,6 +1233,17 @@ private boolean runtimeSourceOnly;
         for (int i = 0; i < episodes.size(); i++) if (episodes.get(i).isSelected()) return i;
         if (mHistory == null) return 0;
         Episode historyEpisode = mHistory.getEpisode();
+        // 历史集 URL 能定位到当前列表条目时（同集多版本并存）先按 URL 锁定版本，
+        // 否则“集号相同即同集”会把用户点过的第二版本误认成第一版本；
+        // 换线路/换源/源站刷新后 URL 必然失配，交回下面的集号容错，保住跨线路续播与刷新后选中。
+        for (int i = 0; i < episodes.size(); i++) {
+            if (TextUtils.isEmpty(historyEpisode.getUrl())) break;
+            if (!TextUtils.equals(historyEpisode.getUrl(), episodes.get(i).getUrl())) continue;
+            if (episodes.get(i).getTmdbEpisode() != null && episodes.get(i).getTmdbEpisode().getNumber() > 0
+                    && historyEpisode.getTmdbEpisode() != null && historyEpisode.getTmdbEpisode().getNumber() > 0
+                    && !episodes.get(i).matchesNumber(historyEpisode)) continue;
+            return i;
+        }
         for (int i = 0; i < episodes.size(); i++) if (episodes.get(i).matchesPlayback(historyEpisode)) return i;
         return 0;
     }
@@ -2429,7 +2441,9 @@ private boolean runtimeSourceOnly;
         // 快速 TMDB 播放在历史续播或聚合开启时，允许同一标准季集跨线路共享进度。
         boolean crossSource = mHistory.isCrossSourcePlayback();
         boolean shareEpisodeProgress = crossSource || isResumeFromHistory() || Setting.isHistoryAggregationEffective();
-        boolean sameEpisode = historyEpisode.matchesPlayback(mHistory.getEpisode());
+        // 历史集 URL 能定位到当前线路条目（同集多版本并存）时才启用版本消歧；换线路/刷新保留集号容错。
+        boolean versionAware = flag.containsEpisodeUrl(mHistory.getEpisode());
+        boolean sameEpisode = historyEpisode.matchesPlayback(mHistory.getEpisode(), versionAware);
         boolean compatibleFlag = shareEpisodeProgress || TextUtils.equals(mHistory.getVodFlag(), flag.getFlag());
         if (!sameEpisode || !compatibleFlag) mIntroSkipPlayback.reset();
         if (!sameEpisode || !compatibleFlag) {
@@ -5385,8 +5399,10 @@ private boolean runtimeSourceOnly;
         boolean crossSource = mHistory.isCrossSourcePlayback();
         boolean shareEpisodeProgress = crossSource || isResumeFromHistory() || Setting.isHistoryAggregationEffective();
         boolean compatibleFlag = shareEpisodeProgress || TextUtils.equals(mHistory.getVodFlag(), flag.getFlag());
+        // 历史集 URL 能定位到当前线路条目（同集多版本并存）时才启用版本消歧；换线路/刷新保留集号容错。
+        boolean versionAware = flag.containsEpisodeUrl(mHistory.getEpisode());
         boolean sameEpisode = episode != null && (shareEpisodeProgress
-                ? historyEpisode.matchesPlayback(mHistory.getEpisode())
+                ? historyEpisode.matchesPlayback(mHistory.getEpisode(), versionAware)
                 : episode.matches(mHistory.getEpisode()));
         if (!compatibleFlag || (episode != null && !sameEpisode)) {
             mHistory.setPosition(C.TIME_UNSET);
@@ -5461,7 +5477,10 @@ private boolean runtimeSourceOnly;
     private void updateHistory(Episode item) {
         // 换线路或源站刷新时同一集的 URL、集名格式可能变化，统一按播放恢复规则识别。
         Episode historyEpisode = withSourceSeasonEpisodeIdentity(item);
-        boolean sameEpisode = historyEpisode.matchesPlayback(mHistory.getEpisode());
+        // 历史里那集的 URL 仍能定位到当前线路条目时（同集多版本并存）才启用版本消歧；
+        // 换线路/换源/源站刷新后 URL 必然失配，必须保留集号容错，否则跨线路续播会丢失进度。
+        boolean versionAware = getFlag().containsEpisodeUrl(mHistory.getEpisode());
+        boolean sameEpisode = historyEpisode.matchesPlayback(mHistory.getEpisode(), versionAware);
         boolean sameFlag = TextUtils.equals(mHistory.getVodFlag(), getFlag().getFlag());
         if (!sameEpisode || !sameFlag) mIntroSkipPlayback.reset();
         if ((!sameEpisode || !sameFlag) && service() != null) {
@@ -5547,9 +5566,8 @@ private boolean runtimeSourceOnly;
         FollowingPlaybackBridge.findAsync(identityKey, existing -> {
             if (isFinishing() || isDestroyed()) return;
             if (existing != null) {
-                followingActionPending = false;
-                mBinding.following.setEnabled(true);
-                FollowingActivity.start(this, existing.identityKey);
+                // 播放页保持原地：已追更时再次点击即刻取消，绝不跳转追更页打断播放。
+                cancelFollowing(identityKey);
                 return;
             }
             Following item = FollowingPlaybackBridge.build(mHistory, currentSourceSeasonNumber());
@@ -5567,6 +5585,23 @@ private boolean runtimeSourceOnly;
                 updateFollowingState();
                 Notify.show(R.string.following_added);
             });
+        });
+    }
+
+    /** 播放页取消追更：写墓碑后立即刷新按钮状态，不离开当前播放页。 */
+    private void cancelFollowing(String identityKey) {
+        FollowingScheduler.cancelNext(this, identityKey);
+        FollowingPlaybackBridge.deleteAsync(identityKey, error -> {
+            followingActionPending = false;
+            if (isFinishing() || isDestroyed()) return;
+            if (error != null) {
+                mBinding.following.setEnabled(true);
+                Notify.show(error.getMessage());
+                return;
+            }
+            updateFollowingState();
+            FollowingPlaybackBridge.refreshUnreadCountAsync(null);
+            Notify.show(R.string.following_canceled);
         });
     }
 
@@ -10039,7 +10074,7 @@ private boolean showKaraokeResultIfNeeded(@Nullable Runnable after) {
         if (result == null) return false;
         mKaraokeResultShown = true;
         KaraokeResultView view = new KaraokeResultView(this).setLeanbackLandscapeExpanded(true).setResult(result);
-        AlertDialog dialog = new MaterialAlertDialogBuilder(this, R.style.ThemeOverlay_WebHTV_LightDialog).setView(view).create();
+        AlertDialog dialog = new WebHtvAlertDialogBuilder(this, R.style.ThemeOverlay_WebHTV_Dialog).setView(view).create();
         view.setAction(() -> {
             dialog.dismiss();
             runAfterKaraokeResult(after);
