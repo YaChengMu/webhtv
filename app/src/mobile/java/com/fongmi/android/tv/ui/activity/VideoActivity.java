@@ -74,6 +74,7 @@ import com.fongmi.android.tv.bean.DownloadItem;
 import com.fongmi.android.tv.bean.Episode;
 import com.fongmi.android.tv.bean.EpisodePositionCache;
 import com.fongmi.android.tv.bean.Flag;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.ui.helper.EpisodeSeasonSnapshot;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.bean.Keep;
@@ -1500,11 +1501,6 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     }
 
     @Override
-    protected boolean applyGlobalTheme() {
-        return false;
-    }
-
-    @Override
     protected void initView(Bundle savedInstanceState) {
         initializeRuntimeDetailMode();
         mTmdbDetailTimeout = this::showTmdbDetailFallback;
@@ -1649,6 +1645,8 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         mBinding.control.action.next.setOnClickListener(view -> checkNext());
         mBinding.control.action.decode.setOnClickListener(guarded(this::onDecode));
         mBinding.control.action.playParams.setOnClickListener(guarded(this::onPlayParams));
+        mBinding.control.action.multiThreadProxy.setOnClickListener(guarded(this::onMultiThreadProxy));
+        mBinding.control.action.codecCapability.setOnClickListener(guarded(this::onCodecCapabilityPanel));
         mBinding.control.action.ending.setOnClickListener(guarded(this::onEnding));
         mBinding.control.action.repeat.setOnClickListener(guarded(this::onRepeat));
         mBinding.control.action.opening.setOnClickListener(guarded(this::onOpening));
@@ -4850,7 +4848,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         if (result == null || isFinishing() || isDestroyed()) return;
         if (mKaraokeResultDialog != null && mKaraokeResultDialog.isShowing()) return;
         KaraokeResultView view = new KaraokeResultView(this).setResult(result);
-        AlertDialog dialog = new MaterialAlertDialogBuilder(this, R.style.ThemeOverlay_WebHTV_LightDialog).setView(view).create();
+        AlertDialog dialog = new WebHtvAlertDialogBuilder(this, R.style.ThemeOverlay_WebHTV_Dialog).setView(view).create();
         view.setAction(() -> {
             dialog.dismiss();
             completeKaraokeResult(action);
@@ -5988,8 +5986,10 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         boolean crossSource = mHistory.isCrossSourcePlayback();
         boolean shareEpisodeProgress = crossSource || isResumeFromHistory() || Setting.isHistoryAggregationEffective();
         boolean compatibleFlag = shareEpisodeProgress || TextUtils.equals(mHistory.getVodFlag(), flag.getFlag());
+        // 历史集 URL 能定位到当前线路条目（同集多版本并存）时才启用版本消歧；换线路/刷新保留集号容错。
+        boolean versionAware = flag.containsEpisodeUrl(mHistory.getEpisode());
         boolean sameEpisode = episode != null && (shareEpisodeProgress
-                ? historyEpisode.matchesPlayback(mHistory.getEpisode())
+                ? historyEpisode.matchesPlayback(mHistory.getEpisode(), versionAware)
                 : episode.matches(mHistory.getEpisode()));
         if (!compatibleFlag || (episode != null && !sameEpisode)) {
             mHistory.setPosition(C.TIME_UNSET);
@@ -6060,7 +6060,10 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     private void updateHistory(Episode item) {
         // 换线路或源站刷新时同一集的 URL、集名格式可能变化，统一按播放恢复规则识别。
         Episode historyEpisode = withSourceSeasonEpisodeIdentity(item);
-        boolean sameEpisode = historyEpisode.matchesPlayback(mHistory.getEpisode());
+        // 历史里那集的 URL 仍能定位到当前线路条目时（同集多版本并存）才启用版本消歧；
+        // 换线路/换源/源站刷新后 URL 必然失配，必须保留集号容错，否则跨线路续播会丢失进度。
+        boolean versionAware = getFlag().containsEpisodeUrl(mHistory.getEpisode());
+        boolean sameEpisode = historyEpisode.matchesPlayback(mHistory.getEpisode(), versionAware);
         boolean sameFlag = TextUtils.equals(mHistory.getVodFlag(), getFlag().getFlag());
         if (!sameEpisode || !sameFlag) mIntroSkipPlayback.reset();
         if ((!sameEpisode || !sameFlag) && service() != null) {
@@ -6159,9 +6162,8 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         FollowingPlaybackBridge.findAsync(identityKey, existing -> {
             if (isFinishing() || isDestroyed()) return;
             if (existing != null) {
-                followingActionPending = false;
-                mBinding.following.setEnabled(true);
-                FollowingActivity.start(this, existing.identityKey);
+                // 播放页保持原地：已追更时再次点击即刻取消，绝不跳转追更页打断播放。
+                cancelFollowing(identityKey);
                 return;
             }
             Following item = FollowingPlaybackBridge.build(mHistory, currentSourceSeasonNumber());
@@ -6179,6 +6181,23 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
                 updateFollowingState();
                 Notify.show(R.string.following_added);
             });
+        });
+    }
+
+    /** 播放页取消追更：写墓碑后立即刷新按钮状态，不离开当前播放页。 */
+    private void cancelFollowing(String identityKey) {
+        FollowingScheduler.cancelNext(this, identityKey);
+        FollowingPlaybackBridge.deleteAsync(identityKey, error -> {
+            followingActionPending = false;
+            if (isFinishing() || isDestroyed()) return;
+            if (error != null) {
+                mBinding.following.setEnabled(true);
+                Notify.show(error.getMessage());
+                return;
+            }
+            updateFollowingState();
+            FollowingPlaybackBridge.refreshUnreadCountAsync(null);
+            Notify.show(R.string.following_canceled);
         });
     }
 
