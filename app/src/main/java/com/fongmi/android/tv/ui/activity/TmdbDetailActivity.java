@@ -120,6 +120,7 @@ import com.fongmi.android.tv.following.FollowingUpdatePolicy;
 import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.setting.DetailRuntimeModePolicy;
 import com.fongmi.android.tv.setting.TmdbSourceState;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.ui.detail.DetailModeHost;
 import com.fongmi.android.tv.ui.detail.EnhancedDetailController;
 import com.fongmi.android.tv.ui.detail.FusionDetailController;
@@ -153,6 +154,7 @@ import com.fongmi.android.tv.setting.MultiThreadProxySetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.setting.TmdbSitePolicy;
+import com.fongmi.android.tv.theme.ThemeController;
 import com.fongmi.android.tv.title.MediaTitleLearningExample;
 import com.fongmi.android.tv.title.MediaTitleLearningStore;
 import com.fongmi.android.tv.title.MediaTitleParser;
@@ -243,7 +245,6 @@ import com.fongmi.android.tv.web.WebHomeInlineVodStore;
 import com.google.android.flexbox.FlexboxLayout;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.DataSource;
 import com.bumptech.glide.load.engine.GlideException;
@@ -286,7 +287,6 @@ import java.util.regex.Pattern;
 public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.Listener, Clock.Callback, PlayerGesture.Listener, SubtitlePlaybackSession.Host, TmdbDetailHost {
 
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.getDefault());
-    private static final int FOCUS_STROKE = 0xFFFFD166;
     private static final int FOCUS_STROKE_DP = 3;
     private static final int CHIP_STROKE_DP = 1;
     private static final int CHIP_MAX_WIDTH_DP = 240;
@@ -2293,7 +2293,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             return;
         }
         boolean focused = binding.playerPanel.hasFocus() && !hasFocusedChild(inlineControlsView());
-        binding.playerPanel.setStrokeColor(focused ? FOCUS_STROKE : colors.line);
+        binding.playerPanel.setStrokeColor(focused ? focusStroke() : colors.line);
         binding.playerPanel.setStrokeWidth(ResUtil.dp2px(focused ? FOCUS_STROKE_DP : CHIP_STROKE_DP));
     }
 
@@ -2343,7 +2343,12 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private void applyButtonFocus(MaterialButton button, int stroke, boolean focused) {
         button.setStrokeWidth(ResUtil.dp2px(focused ? FOCUS_STROKE_DP : CHIP_STROKE_DP));
-        button.setStrokeColor(ColorStateList.valueOf(focused ? FOCUS_STROKE : stroke));
+        button.setStrokeColor(ColorStateList.valueOf(focused ? focusStroke() : stroke));
+    }
+
+    /** TV 焦点环的唯一代码来源：与 {@code ?attr/tvFocusRing} 同一取值，跟随主题 FOCUS 槽。 */
+    private int focusStroke() {
+        return ThemeController.focusRingColor(this);
     }
 
     private void setEpisodeToolButton(MaterialButton button, ThemeColors colors) {
@@ -2385,7 +2390,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         button.setTextColor(colors.primary);
         button.setIconTint(ColorStateList.valueOf(colors.primary));
         button.setStrokeWidth(focused ? ResUtil.dp2px(FOCUS_STROKE_DP) : (lightCinemaPlate ? ResUtil.dp2px(CHIP_STROKE_DP) : 0));
-        button.setStrokeColor(ColorStateList.valueOf(focused ? FOCUS_STROKE : (lightCinemaPlate ? colors.line : Color.TRANSPARENT)));
+        button.setStrokeColor(ColorStateList.valueOf(focused ? focusStroke() : (lightCinemaPlate ? colors.line : Color.TRANSPARENT)));
     }
 
     private int episodeTitleRestingColor(boolean lightCinemaPlate, ThemeColors colors) {
@@ -2400,7 +2405,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         button.setTextColor(colors.primary);
         button.setIconTint(ColorStateList.valueOf(colors.primary));
         button.setStrokeWidth(ResUtil.dp2px(focused ? FOCUS_STROKE_DP : CHIP_STROKE_DP));
-        button.setStrokeColor(ColorStateList.valueOf(focused ? FOCUS_STROKE : colors.lineStrong));
+        button.setStrokeColor(ColorStateList.valueOf(focused ? focusStroke() : colors.lineStrong));
     }
 
     private void tintTextTree(View view, ThemeColors colors) {
@@ -4236,16 +4241,6 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         return getIntent().getIntExtra("detail_mode", Setting.getDetailOpenMode()) == Setting.DETAIL_OPEN_CINEMA || Setting.isTmdbCinemaStyle();
     }
 
-    @Override
-    protected boolean applyGlobalTheme() {
-        return !isCinemaStyle();
-    }
-
-    @Override
-    protected boolean preserveDetailThemeState() {
-        return isCinemaStyle();
-    }
-
     private ThemeColors currentThemeColors() {
         ThemeColors colors = lightTheme ? ThemeColors.light() : ThemeColors.dark();
         return isCinemaStyle() ? ThemeColors.cinema(lightTheme) : colors;
@@ -4448,7 +4443,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         GradientDrawable background = new GradientDrawable();
         background.setColor(modeController.isCinemaStyle() ? TmdbCinemaTheme.palette(lightTheme).ratingChip() : colors.chip);
         background.setCornerRadius(ResUtil.dp2px(10));
-        background.setStroke(ResUtil.dp2px(focused ? FOCUS_STROKE_DP : CHIP_STROKE_DP), focused ? FOCUS_STROKE : colors.line);
+        background.setStroke(ResUtil.dp2px(focused ? FOCUS_STROKE_DP : CHIP_STROKE_DP), focused ? focusStroke() : colors.line);
         row.setBackground(background);
         for (int i = 0; i < row.getChildCount(); i++) {
             View child = row.getChildAt(i);
@@ -6767,7 +6762,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
      */
     private void showMovieDialog(Episode episode) {
         DialogTmdbEpisodeBinding dialogBinding = DialogTmdbEpisodeBinding.inflate(getLayoutInflater());
-        AlertDialog dialog = new MaterialAlertDialogBuilder(this).setView(dialogBinding.getRoot()).create();
+        AlertDialog dialog = new WebHtvAlertDialogBuilder(this).setView(dialogBinding.getRoot()).create();
         ThemeColors colors = lightTheme ? ThemeColors.light() : ThemeColors.dark();
         dialogBinding.panel.setCardBackgroundColor(colors.panel);
         dialogBinding.panel.setStrokeColor(colors.line);
@@ -6882,7 +6877,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private void showTmdbEpisodeDialog(Episode episode, int episodeNumber, JsonObject detail, List<String> photos, List<TmdbPerson> guests) {
         DialogTmdbEpisodeBinding dialogBinding = DialogTmdbEpisodeBinding.inflate(getLayoutInflater());
-        AlertDialog dialog = new MaterialAlertDialogBuilder(this).setView(dialogBinding.getRoot()).create();
+        AlertDialog dialog = new WebHtvAlertDialogBuilder(this).setView(dialogBinding.getRoot()).create();
         ThemeColors colors = lightTheme ? ThemeColors.light() : ThemeColors.dark();
         dialogBinding.panel.setCardBackgroundColor(colors.panel);
         dialogBinding.panel.setStrokeColor(colors.line);
@@ -7171,11 +7166,11 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private void applyPhotoButtonFocus(MaterialButton button, boolean focused) {
         button.setBackgroundTintList(ColorStateList.valueOf(focused ? 0x33FFFFFF : 0x18FFFFFF));
         button.setStrokeWidth(ResUtil.dp2px(focused ? FOCUS_STROKE_DP : CHIP_STROKE_DP));
-        button.setStrokeColor(ColorStateList.valueOf(focused ? FOCUS_STROKE : 0x4DFFFFFF));
+        button.setStrokeColor(ColorStateList.valueOf(focused ? focusStroke() : 0x4DFFFFFF));
     }
 
     private void showPhotoActionDialog(String url) {
-        new MaterialAlertDialogBuilder(this)
+        new WebHtvAlertDialogBuilder(this)
                 .setItems(new CharSequence[]{getString(R.string.detail_image_save)}, (dialog, which) -> savePhoto(url, null))
                 .show();
     }
@@ -7373,8 +7368,12 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private boolean isHistoryEpisode(Episode episode, History item) {
         if (episode == null || item == null) return false;
         Episode saved = item.getEpisode();
+        // 历史集 URL 仍能定位到当前线路条目（同集多版本并存）时启用版本消歧，
+        // 避免“点第二版本却被当作第一版本”；换线路/换源/源站刷新后 URL 必然失配，
+        // 保留集号容错，保住跨线路续播与刷新后的“继续播放”。
+        boolean versionAware = selectedFlag != null && selectedFlag.containsEpisodeUrl(saved);
         if (item.getTmdbEpisodeNumber() > 0 && episode.getTmdbEpisode() != null && episode.getTmdbEpisode().getNumber() > 0) {
-            return episode.matchesPlayback(saved);
+            return episode.matchesPlayback(saved, versionAware);
         }
         if (!TextUtils.isEmpty(item.getEpisodeUrl()) && item.getEpisodeUrl().equals(episode.getUrl())) return true;
         return episode.matchesName(saved) || episode.getDisplayName().equals(item.getVodRemarks()) || historyEpisodeTitle(episode).equals(item.getVodRemarks());
@@ -8437,7 +8436,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     protected void onInlineInfo() {
         if (!hasInlineInfo()) return;
-        new MaterialAlertDialogBuilder(this)
+        new WebHtvAlertDialogBuilder(this)
                 .setTitle(inlineTitleText())
                 .setMessage(buildInlineInfoText())
                 .setPositiveButton(R.string.dialog_positive, null)
@@ -8565,7 +8564,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         int count = currentInlineResult.getUrl().getValues().size();
         String[] labels = new String[count];
         for (int i = 0; i < count; i++) labels[i] = inlineQualityName(i);
-        new MaterialAlertDialogBuilder(this)
+        new WebHtvAlertDialogBuilder(this)
                 .setTitle(R.string.detail_quality)
                 .setSingleChoiceItems(labels, currentInlineResult.getUrl().getPosition(), (dialog, which) -> {
                     dialog.dismiss();
@@ -8989,7 +8988,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         String[] kernels = PlayerKernelDialog.kernels(getResources());
         String[] items = Arrays.copyOf(kernels, kernels.length + 1);
         items[kernels.length] = getString(R.string.player_kernel_external);
-        new MaterialAlertDialogBuilder(this).setItems(items, (dialog, which) -> onInlinePlayerChoice(kernels, which)).show();
+        new WebHtvAlertDialogBuilder(this).setItems(items, (dialog, which) -> onInlinePlayerChoice(kernels, which)).show();
         return true;
     }
 
@@ -9435,7 +9434,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             showPage.accept(pageIndex[0], true);
         });
 
-        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+        AlertDialog dialog = new WebHtvAlertDialogBuilder(this)
                 .setView(content)
                 .create();
         holder[0] = dialog;
@@ -9617,7 +9616,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             showPage.accept(selectedPage, true);
         };
 
-        AlertDialog dialog = new MaterialAlertDialogBuilder(this).setView(scroll).create();
+        AlertDialog dialog = new WebHtvAlertDialogBuilder(this).setView(scroll).create();
         panel.setTag(dialog);
         dialog.setOnShowListener(value -> render[0].run());
         if (!canTouchUi()) return;
@@ -9666,7 +9665,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         GradientDrawable background = new GradientDrawable();
         background.setCornerRadius(ResUtil.dp2px(4));
         background.setColor(focused ? colors.control : selected ? colors.chipActive : colors.chip);
-        background.setStroke(ResUtil.dp2px(focused ? FOCUS_STROKE_DP : selected ? 2 : CHIP_STROKE_DP), focused ? FOCUS_STROKE : selected ? colors.accent : colors.line);
+        background.setStroke(ResUtil.dp2px(focused ? FOCUS_STROKE_DP : selected ? 2 : CHIP_STROKE_DP), focused ? focusStroke() : selected ? colors.accent : colors.line);
         button.setSelected(selected);
         button.setActivated(selected);
         button.setTextColor(colors.primary);
@@ -9848,8 +9847,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         GradientDrawable background = new GradientDrawable();
         background.setCornerRadius(ResUtil.dp2px(6));
         if (focused) {
-            background.setColor(lightTheme ? 0x1AFFD166 : 0x55FFD166);
-            background.setStroke(ResUtil.dp2px(FOCUS_STROKE_DP), FOCUS_STROKE);
+            background.setColor(ThemeController.focusRingColor(this, lightTheme ? 0.10f : 0.33f));
+            background.setStroke(ResUtil.dp2px(FOCUS_STROKE_DP), focusStroke());
             button.setTextColor(lightTheme ? colors.primary : 0xFFFFFFFF);
         } else if (selected) {
             background.setColor(lightTheme ? 0x1F20B866 : 0x332CC56F);
@@ -9867,8 +9866,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         GradientDrawable background = new GradientDrawable();
         background.setCornerRadius(ResUtil.dp2px(6));
         if (focused) {
-            background.setColor(0x55FFD166);
-            background.setStroke(ResUtil.dp2px(FOCUS_STROKE_DP), FOCUS_STROKE);
+            background.setColor(ThemeController.focusRingColor(this, 0.33f));
+            background.setStroke(ResUtil.dp2px(FOCUS_STROKE_DP), focusStroke());
         } else {
             background.setColor(0x00000000);
         }
@@ -9911,8 +9910,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         int text = focused ? (lightTheme ? colors.primary : 0xFFFFFFFF) : colors.primary;
         button.setTextColor(text);
         button.setIconTint(ColorStateList.valueOf(text));
-        button.setBackgroundTintList(ColorStateList.valueOf(focused ? (lightTheme ? 0x1AFFD166 : 0x55FFD166) : colors.control));
-        button.setStrokeColor(ColorStateList.valueOf(focused ? FOCUS_STROKE : colors.lineStrong));
+        button.setBackgroundTintList(ColorStateList.valueOf(focused ? ThemeController.focusRingColor(this, lightTheme ? 0.10f : 0.33f) : colors.control));
+        button.setStrokeColor(ColorStateList.valueOf(focused ? focusStroke() : colors.lineStrong));
         button.setStrokeWidth(ResUtil.dp2px(focused ? 2 : 1));
     }
 
@@ -11547,7 +11546,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         introSkipPlayback.setSkipConfirmListener((segment, action) -> {
             if (isFinishing() || isDestroyed()) return false;
             if (introSkipConfirmDialog != null && introSkipConfirmDialog.isShowing()) return false;
-            introSkipConfirmDialog = new MaterialAlertDialogBuilder(this)
+            introSkipConfirmDialog = new WebHtvAlertDialogBuilder(this)
                     .setTitle(R.string.intro_skip_confirm_title)
                     .setMessage(IntroSkipKinds.confirmMessage(segment))
                     .setPositiveButton(android.R.string.ok, (dialog, which) -> action.run())
@@ -11728,13 +11727,47 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         setFollowingButtonsEnabled(false);
         resolveFollowing(tmdb, identityKey, siteKey, vodId, season, existing -> {
             if (isFinishing() || isDestroyed()) return;
-            if (existing != null) {
-                followingActionPending = false;
-                setFollowingButtonsEnabled(true);
-                FollowingActivity.start(this, existing.identityKey);
+            if (isFollowed(existing)) {
+                // 详情页与播放页统一为就地开关：再次点击「已追更」立即取消，绝不跳转追更页。
+                cancelFollowing(identityKey);
                 return;
             }
             addFollowing(tmdb, siteKey, vodId, season, identityKey);
+        });
+    }
+
+    /**
+     * 是否处于「已追更」状态。
+     * <p>
+     * `resolveFollowing` 走 TMDB 身份迁移路径时，为防复活会**故意返回墓碑行**
+     * （`FollowingStore.resolveTmdb` 的墓碑守卫，C9 语义），因此这里不能只用 `!= null`
+     * 判断：否则取消追更后按钮仍显示「已追更」，内联播放中再点只会重复写墓碑、
+     * 永远无法重新追更。墓碑行必须视为未追更，交给 `addFollowing` 走复活路径。
+     */
+    private boolean isFollowed(Following item) {
+        return item != null && !item.isDeleted();
+    }
+
+    /**
+     * 详情页取消追更：写墓碑、取消该条 one-shot 检查，然后立即刷新按钮状态。
+     * <p>
+     * 无论是否处于内联播放，本页都必须就地生效而不是跳转追更页：跳页既会打断播放，
+     * 也会把「取消」这种一步操作变成两步，与播放页（mobile/leanback `VideoActivity`）的
+     * 就地开关语义保持一致（见 `docs/FOLLOW-1-following-updates-design.md` 8.3.1）。
+     */
+    private void cancelFollowing(String identityKey) {
+        FollowingScheduler.cancelNext(this, identityKey);
+        FollowingPlaybackBridge.deleteAsync(identityKey, error -> {
+            followingActionPending = false;
+            if (isFinishing() || isDestroyed()) return;
+            if (error != null) {
+                setFollowingButtonsEnabled(true);
+                Notify.show(error.getMessage());
+                return;
+            }
+            updateFollowingState();
+            FollowingPlaybackBridge.refreshUnreadCountAsync(null);
+            Notify.show(R.string.following_canceled);
         });
     }
 
@@ -11857,7 +11890,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         applyFollowingButtonState(true, false);
         resolveFollowing(tmdb, identityKey, getKeyText(), getIdText(), season, item -> {
             if (generation != followingUiGeneration || isFinishing() || isDestroyed()) return;
-            applyFollowingButtonState(true, item != null);
+            applyFollowingButtonState(true, isFollowed(item));
         });
     }
 
@@ -13132,7 +13165,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private void applyChipFocus(MaterialButton button, boolean selected, boolean focused, ThemeColors colors) {
         button.setSelected(!Util.isLeanback() || selected || focused);
         button.setStrokeWidth(ResUtil.dp2px(focused ? FOCUS_STROKE_DP : (selected ? 2 : CHIP_STROKE_DP)));
-        button.setStrokeColor(ColorStateList.valueOf(focused ? FOCUS_STROKE : (selected ? colors.accent : colors.line)));
+        button.setStrokeColor(ColorStateList.valueOf(focused ? focusStroke() : (selected ? colors.accent : colors.line)));
     }
 
     private void styleMetaChips() {

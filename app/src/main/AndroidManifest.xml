@@ -22,6 +22,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!--
         Do not add <queries> here: Android 9 TV firmware parses the final APK manifest
@@ -178,6 +179,11 @@
             android:process=":node"
             android:foregroundServiceType="dataSync"
             android:stopWithTask="false" />
+
+        <service
+            android:name=".cache.CacheCleanupJobService"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
 
         <service
             android:name=".service.DownloadService"

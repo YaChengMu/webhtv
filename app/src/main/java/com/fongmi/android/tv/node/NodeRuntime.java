@@ -16,6 +16,7 @@ import com.github.catvod.crawler.SpiderDebug;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -35,7 +36,18 @@ public final class NodeRuntime {
     /** 首选端口，被占用时往后找；bundle 本身不做 EADDRINUSE 重试，所以由这边探。 */
     private static final int PREFERRED_PORT = 9988;
     private static final int PORT_SCAN = 20;
-    private static final long START_TIMEOUT_MS = 55_000L;
+
+    /**
+     * 猫源首次加载包含运行时检查、bundle 下载、Node 启动和 /config 探测，不能沿用普通接口的短预算。
+     * 这些预算集中在运行时类中，保证主进程等待、子进程就绪和文件传输不会各自使用互相矛盾的时长。
+     */
+    public static final long START_TIMEOUT_MS = TimeUnit.MINUTES.toMillis(12);
+    static final long TRANSFER_TIMEOUT_MS = TimeUnit.MINUTES.toMillis(3);
+    static final long LIB_TRANSFER_TIMEOUT_MS = TimeUnit.MINUTES.toMillis(5);
+    static final long METADATA_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(8);
+    static final long READY_TIMEOUT_MS = TimeUnit.MINUTES.toMillis(3);
+    static final long READY_PROBE_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(2);
+    static final long READY_POLL_MS = 200L;
 
     private static volatile int port;
     private static final AtomicBoolean STARTING = new AtomicBoolean(false);
