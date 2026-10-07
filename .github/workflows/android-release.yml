@@ -70,6 +70,19 @@ jobs:
           java-version: "21"
           cache: gradle
 
+      # Point Gradle at the locally installed Temurin JDK so the daemon JVM
+      # toolchain (gradle/gradle-daemon-jvm.properties: toolchainVersion=21) is
+      # satisfied without contacting foojay. The previous failure was a 400 from
+      # foojay when Gradle tried to download a JetBrains JDK that no local JDK
+      # matched the vendor requirement.
+      - name: Use local JDK for Gradle daemon toolchain (skip foojay)
+        run: |
+          {
+            echo "org.gradle.java.installations.paths=$JAVA_HOME"
+            echo "org.gradle.java.installations.auto-download=false"
+            echo "org.gradle.java.installations.auto-detect=false"
+          } >> gradle.properties
+
       - name: Set up Python 3.10
         uses: actions/setup-python@v5
         with:
