@@ -29,6 +29,7 @@ import androidx.fragment.app.FragmentActivity;
 import androidx.fragment.app.FragmentManager;
 
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.theme.ThemeController;
 import com.fongmi.android.tv.ui.helper.TmdbSeasonResolver;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Util;
@@ -391,7 +392,11 @@ public final class ChoiceDialog extends DialogFragment {
 
         MaterialTextView titleView = new MaterialTextView(requireContext());
         titleView.setText(title);
-        titleView.setTextColor(Color.parseColor("#202124"));
+        // The panel is shape_shell_proxy_dialog (?attr/colorSurfaceContainerHigh), which on
+        // the TV flavour compiles to the dark table (#2A2F34). A fixed #202124 title was
+        // therefore invisible there - measured 1.00:1 on device - while the very same
+        // AppearanceDialog rows were being opened from this dialog. Use the active palette.
+        titleView.setTextColor(ThemeController.current().colorOnSurface());
         titleView.setTextSize(18);
         titleView.setGravity(Gravity.CENTER_VERTICAL);
         titleView.setSingleLine(false);
@@ -406,7 +411,8 @@ public final class ChoiceDialog extends DialogFragment {
     private void addMessage(LinearLayout root) {
         MaterialTextView messageView = new MaterialTextView(requireContext());
         messageView.setText(message);
-        messageView.setTextColor(Color.parseColor("#5F6368"));
+        // Same panel, same reason as the title above.
+        messageView.setTextColor(ThemeController.current().colorOnSurfaceVariant());
         messageView.setTextSize(14);
         messageView.setLineSpacing(dp(2), 1f);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
