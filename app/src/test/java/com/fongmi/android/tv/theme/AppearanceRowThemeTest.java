@@ -137,6 +137,7 @@ public class AppearanceRowThemeTest {
         assertTrue(dialog.contains("titleView.setTextColor(ThemeController.current().colorOnSurface())"));
         assertTrue(dialog.contains("messageView.setTextColor(ThemeController.current().colorOnSurfaceVariant())"));
         assertTrue(dialog.contains("import com.fongmi.android.tv.theme.ThemeController;"));
+        assertTrue(dialog.contains("ThemeController.bindDialog(dialog)"));
         // The title/message sit directly on the dialog panel, which is the part that was
         // invisible. Item rows keep their own opaque card, so their colours are a separate
         // concern and stay untouched here.
@@ -147,6 +148,21 @@ public class AppearanceRowThemeTest {
                 dialog.substring(title, dialog.indexOf(";", title)).contains("parseColor"));
         assertFalse("the panel-drawn message must not be a fixed colour",
                 dialog.substring(message, dialog.indexOf(";", message)).contains("parseColor"));
+    }
+
+    @Test
+    public void choiceItemsUseTheActivePaletteInBothModes() throws Exception {
+        String dialog = codeOnly(read("src/main/java/com/fongmi/android/tv/ui/dialog/ChoiceDialog.java"));
+        assertTrue(dialog.contains("ThemeTokens tokens = ThemeController.current()"));
+        assertTrue(dialog.contains("tokens.colorSurfaceContainerHigh()"));
+        assertTrue(dialog.contains("tokens.colorOnPrimaryContainer()"));
+        assertTrue(dialog.contains("tokens.colorSurfaceContainer()"));
+        assertTrue(dialog.contains("tokens.colorOnSurface()"));
+        assertTrue(dialog.contains("ThemeEditorUi.shape(requireContext(), tokens.colorSurfaceContainerHigh(), 0, 0, 22)"));
+        assertFalse(dialog.contains("#9AA0A6"));
+        assertFalse(dialog.contains("#F1F3F4"));
+        assertFalse(dialog.contains("#202124"));
+        assertFalse(dialog.contains("#1A73E8"));
     }
 
     /**

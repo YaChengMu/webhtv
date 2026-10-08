@@ -115,7 +115,7 @@ public final class ThemeController {
 
     public static void refresh() {
         boolean systemDark = (Resources.getSystem().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
-        current = ThemeResolver.resolve(ThemeMode.SYSTEM, ThemeSeed.NONE, 0, 0, systemDark);
+        current = ThemeResolver.resolve(currentThemeMode(), ThemeSeed.NONE, 0, 0, systemDark);
     }
 
     /**
@@ -139,7 +139,7 @@ public final class ThemeController {
         // compiled table, so the active tokens stay comparable with inflated colours on
         // every flavour (see resolvedDark()).
         boolean systemDark = resolvedDark();
-        ThemeMode themeMode = ThemeMode.SYSTEM;
+        ThemeMode themeMode = currentThemeMode();
         int themeColor = com.fongmi.android.tv.setting.Setting.getThemeColor();
         if (themeColor == -1) {
             return ThemeResolver.resolve(themeMode, ThemeSeed.NONE, 0, 0, profile, null, systemDark);
