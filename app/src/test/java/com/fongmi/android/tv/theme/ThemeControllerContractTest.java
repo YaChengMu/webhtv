@@ -36,6 +36,7 @@ public class ThemeControllerContractTest {
         assertTrue(controller.contains("AppCompatDelegate.MODE_NIGHT_NO"));
         assertTrue(controller.contains("AppCompatDelegate.MODE_NIGHT_YES"));
         assertTrue(controller.contains("AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM"));
+        assertTrue(controller.contains("ThemeMode themeMode = currentThemeMode();"));
         assertTrue(read("src/main/java/com/fongmi/android/tv/App.java").contains("ThemeController.applyNightModeToApp();"));
         for (String flavour : new String[]{"mobile", "leanback"}) {
             String dialog = read("src/" + flavour + "/java/com/fongmi/android/tv/ui/dialog/AppearanceDialog.java");
