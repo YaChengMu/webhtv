@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.ui.dialog;
 
 import android.app.Dialog;
+import android.content.res.Resources;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
@@ -21,6 +22,7 @@ import androidx.fragment.app.FragmentActivity;
 import androidx.fragment.app.DialogFragment;
 import androidx.viewbinding.ViewBinding;
 
+import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.cache.CacheCenter;
 import com.fongmi.android.tv.cache.CacheCleanupManager;
@@ -38,10 +40,12 @@ import com.fongmi.android.tv.cache.CachePolicyStore;
 import com.fongmi.android.tv.cache.CacheScheduler;
 import com.fongmi.android.tv.cache.CacheSnapshot;
 import com.fongmi.android.tv.databinding.DialogCacheManagementBinding;
+import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.utils.FileUtil;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.fongmi.android.tv.utils.Util;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -64,6 +68,72 @@ public class CacheManagementDialog extends DialogFragment {
 
     public static void show(FragmentActivity activity) {
         new CacheManagementDialog().show(activity.getSupportFragmentManager(), null);
+    }
+
+    /**
+     * Runs the settings row's long-press shortcut: every cache the panel can name is cleared the way
+     * the single-key clear of the pre-split settings row left them, and the outcome is reported as a
+     * notification.
+     *
+     * <p>The panel deliberately stays closed. This entry re-creates a gesture from before the cache
+     * management split, and that one-key clear never opened a screen either: holding the key is the
+     * deliberate act, the cleanup runs in the background, and the settings row re-reads itself once
+     * the cleanup publishes its change. Opening the panel here turned a one-key action into "open a
+     * screen, then watch it", and put a cancel button in front of an action the user had just
+     * confirmed by holding the key.</p>
+     */
+    public static void cleanEverything() {
+        if (CacheCleanupManager.isRunning()) return;
+        Resources resources = shortcutResources();
+        Notify.show(resources.getString(R.string.cache_cleanup_full_started));
+        CacheCleanupManager.execute(CachePolicyEngine.plan(CacheCleanupMode.FULL), "shortcut",
+                result -> Notify.show(describe(result, resources)));
+    }
+
+    /**
+     * The resources the shortcut's toasts resolve their text from.
+     *
+     * <p>{@link Notify} renders through the application context, whose resources carry the system
+     * locale instead of the in-app language the settings screens apply, so a shortcut toast would
+     * otherwise disagree with the panel that reports the identical outcome. Resolving through the
+     * same helper the settings screens use keeps both surfaces in one language.</p>
+     */
+    private static Resources shortcutResources() {
+        return Setting.wrapLanguage(App.get()).getResources();
+    }
+
+    /**
+     * Words a cleanup outcome exactly as the panel's status line does, so the same action reads the
+     * same way whether it was started from the panel or from the settings row's shortcut.
+     *
+     * <p>The resources are passed in rather than read globally: the panel renders - and notifies -
+     * through its host context, which carries the in-app language choice, while the shortcut has to
+     * ask for that same choice explicitly.</p>
+     */
+    static String describe(CacheCleanupResult result, Resources resources) {
+        int message;
+        if (result.status() == CacheCleanupStatus.COMPLETED) {
+            message = R.string.cache_cleanup_done;
+        } else if (result.status() == CacheCleanupStatus.CANCELLED) {
+            message = R.string.cache_cleanup_cancelled;
+        } else if (result.status() == CacheCleanupStatus.FAILED) {
+            message = R.string.cache_cleanup_failed;
+        } else if (result.status() == CacheCleanupStatus.NOT_ALLOWED) {
+            message = R.string.cache_cleanup_not_allowed;
+        } else if (result.status() == CacheCleanupStatus.DEFERRED) {
+            message = R.string.cache_cleanup_deferred;
+        } else {
+            message = R.string.cache_cleanup_partial;
+        }
+        if (result.status() == CacheCleanupStatus.COMPLETED) {
+            return resources.getString(message, FileUtil.byteCountToDisplaySize(result.releasedBytes()),
+                    result.deletedFiles());
+        }
+        if (result.status() == CacheCleanupStatus.PARTIAL) {
+            return resources.getString(message, FileUtil.byteCountToDisplaySize(result.releasedBytes()),
+                    result.deletedFiles(), result.skippedFiles());
+        }
+        return resources.getString(message);
     }
 
     @NonNull
@@ -326,26 +396,7 @@ public class CacheManagementDialog extends DialogFragment {
         setCleanupInteractive(true);
         setDismissableWhileIdle(true);
         binding.cancel.setVisibility(android.view.View.GONE);
-        int message;
-        if (result.status() == CacheCleanupStatus.COMPLETED) {
-            message = R.string.cache_cleanup_done;
-        } else if (result.status() == CacheCleanupStatus.CANCELLED) {
-            message = R.string.cache_cleanup_cancelled;
-        } else if (result.status() == CacheCleanupStatus.FAILED) {
-            message = R.string.cache_cleanup_failed;
-        } else if (result.status() == CacheCleanupStatus.NOT_ALLOWED) {
-            message = R.string.cache_cleanup_not_allowed;
-        } else if (result.status() == CacheCleanupStatus.DEFERRED) {
-            message = R.string.cache_cleanup_deferred;
-        } else {
-            message = R.string.cache_cleanup_partial;
-        }
-        String text = result.status() == CacheCleanupStatus.COMPLETED
-                ? getString(message, FileUtil.byteCountToDisplaySize(result.releasedBytes()), result.deletedFiles())
-                : result.status() == CacheCleanupStatus.PARTIAL
-                ? getString(message, FileUtil.byteCountToDisplaySize(result.releasedBytes()),
-                result.deletedFiles(), result.skippedFiles())
-                : getString(message);
+        String text = describe(result, getResources());
         // The cleanup already finished, so a modal confirmation here would force the user to
         // dismiss an extra dialog for an action that is already done. Notify passively instead
         // and keep the outcome visible in the panel's own status line.
@@ -430,10 +481,12 @@ public class CacheManagementDialog extends DialogFragment {
     }
 
     private void addRow(CacheModuleId id, @Nullable CacheMeasurement measurement, long totalBytes) {
+        boolean mobile = Util.isMobile();
         LinearLayout row = new LinearLayout(requireContext());
-        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setOrientation(mobile ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
         row.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        row.setPadding(0, 10, 0, 10);
+        int padding = mobile ? ResUtil.dp2px(8) : 10;
+        row.setPadding(0, padding, 0, padding);
         LinearLayout detailColumn = new LinearLayout(requireContext());
         detailColumn.setOrientation(LinearLayout.VERTICAL);
         String title = getModuleName(id);
@@ -446,10 +499,34 @@ public class CacheManagementDialog extends DialogFragment {
                 measurement.fileCount(),
                 formatTime(measurement.newestModifiedMs()));
         detailColumn.addView(text(detail, 14, themeColor(android.R.attr.textColorSecondary, 0xFF5F6368)));
-        row.addView(detailColumn, new LinearLayout.LayoutParams(0,
-                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-        row.addView(moduleButton(id));
-        row.addView(limitButton(id));
+        if (mobile) {
+            // Phone text must not compete with two minimum-width action buttons.
+            row.addView(detailColumn, new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+            LinearLayout actions = new LinearLayout(requireContext());
+            actions.setOrientation(LinearLayout.HORIZONTAL);
+            MaterialButton[] buttons = {moduleButton(id), limitButton(id)};
+            for (int index = 0; index < buttons.length; index++) {
+                MaterialButton button = buttons[index];
+                button.setMinWidth(0);
+                button.setMinimumWidth(0);
+                button.setMinHeight(ResUtil.dp2px(48));
+                button.setMinimumHeight(ResUtil.dp2px(48));
+                button.setPaddingRelative(ResUtil.dp2px(8), button.getPaddingTop(),
+                        ResUtil.dp2px(8), button.getPaddingBottom());
+                LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                        0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+                if (index > 0) params.setMarginStart(ResUtil.dp2px(8));
+                actions.addView(button, params);
+            }
+            row.addView(actions, new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        } else {
+            row.addView(detailColumn, new LinearLayout.LayoutParams(0,
+                    LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+            row.addView(moduleButton(id));
+            row.addView(limitButton(id));
+        }
         binding.modules.addView(row);
     }
 
@@ -532,6 +609,8 @@ public class CacheManagementDialog extends DialogFragment {
      * focus always moves through policy row -> cleanup row -> footer without skipping a row.
      */
     private void wireFocusOrder() {
+        // Mobile actions wrap; focus should follow their actual positions, not TV columns.
+        if (Util.isMobile()) return;
         linkVertical(binding.autoCleanup, null, binding.cleanupLight);
         linkVertical(binding.retention, null, binding.cleanupStandard);
         linkVertical(binding.totalLimit, null, binding.cleanupDeep);

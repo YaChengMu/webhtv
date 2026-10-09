@@ -50,6 +50,7 @@ import com.fongmi.android.tv.databinding.DialogCustomCspBinding;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.setting.CustomCspSetting;
 import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
+import com.fongmi.android.tv.ui.custom.CustomNestedScrollView;
 import com.fongmi.android.tv.ui.custom.CustomTextListener;
 import com.fongmi.android.tv.ui.custom.SafeScrollEditText;
 import com.fongmi.android.tv.ui.custom.SettingClipboardOverlay;
@@ -147,24 +148,9 @@ public class CustomCspDialog extends BaseAlertDialog {
         getDialog().setCanceledOnTouchOutside(false);
         Window window = getDialog().getWindow();
         if (window == null) return;
-        WindowManager.LayoutParams params = window.getAttributes();
-        int screenWidth = ResUtil.getScreenWidth(requireContext());
-        int screenHeight = ResUtil.getScreenHeight(requireContext());
-        boolean land = ResUtil.isLand(requireContext());
         window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         window.getDecorView().setPadding(0, 0, 0, 0);
-        params.width = (int) (screenWidth * (land ? 0.76f : 0.94f));
-        params.height = land ? (int) (screenHeight * 0.98f) : WindowManager.LayoutParams.WRAP_CONTENT;
-        window.setAttributes(params);
-        window.setLayout(params.width, params.height);
-        ViewGroup.LayoutParams rootParams = binding.root.getLayoutParams();
-        rootParams.height = land ? params.height : ViewGroup.LayoutParams.WRAP_CONTENT;
-        binding.root.setLayoutParams(rootParams);
-        LinearLayoutCompat.LayoutParams scrollParams = (LinearLayoutCompat.LayoutParams) binding.contentScroll.getLayoutParams();
-        scrollParams.height = land ? 0 : ViewGroup.LayoutParams.WRAP_CONTENT;
-        scrollParams.weight = land ? 1 : 0;
-        binding.contentScroll.setLayoutParams(scrollParams);
-        binding.contentScroll.setMaxHeight(land ? 0 : (int) (screenHeight * 0.58f));
+        applyPageSizing(window, binding.root, binding.contentScroll);
         binding.enabled.requestFocus();
         if (clipboardOverlay == null) clipboardOverlay = SettingClipboardOverlay.attach(this, binding.getRoot());
         getDialog().setOnKeyListener((dialog, keyCode, event) -> {
@@ -174,6 +160,60 @@ public class CustomCspDialog extends BaseAlertDialog {
             else closeAndSave(false);
             return true;
         });
+    }
+
+    /**
+     * 站点注入页面的窗口/内容尺寸策略：**两种朝向都铺满整页**，拆成静态方法便于 JVM 测量测试
+     * 锁定“底部按钮区不被压扁”与“页面确实铺满”。
+     *
+     * <p>旧策略两种朝向都不铺满：竖屏按比例手算高度（{@code WRAP_CONTENT} 窗口 + 滚动区
+     * {@code wrap_content} + {@code 0.58H} 上限 + 无 weight），横屏是 {@code 0.76×0.98} 居中
+     * 比例弹窗。前者在条目多时把底部按钮区挤出窗口下沿裁掉（设备实测取消/确定 从 40dp 变
+     * 34.9dp、末张卡片操作行只剩 9.1dp）；后者在 1080×1920/1920×1080 设备上左右各空出
+     * 一大块背景，用户实测反馈“没有全屏”。这个页面内容多，应按用户要求统一改成全屏整页。
+     *
+     * <p>铺满后窗口高度交给系统，固定高的按钮区永远保住自然高度，剩余空间全部由权重滚动区
+     * 吃掉；页面左右边缘由 XML 的 20dp padding 保证正文不贴边。
+     *
+     * <p>铺满后窗口自身没有多余空间躲屏幕键盘，必须显式 ADJUST_RESIZE，否则底部按钮和列表会被
+     * 键盘盖住（与 AboutDialog 全屏弹窗同一处理）。
+     */
+    static void applyPageSizing(Window window, LinearLayoutCompat root, CustomNestedScrollView scroll) {
+        WindowManager.LayoutParams params = window.getAttributes();
+        params.width = WindowManager.LayoutParams.MATCH_PARENT;
+        params.height = WindowManager.LayoutParams.MATCH_PARENT;
+        params.gravity = Gravity.CENTER;
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        window.setAttributes(params);
+        window.setLayout(params.width, params.height);
+        ViewGroup.LayoutParams rootParams = root.getLayoutParams();
+        rootParams.height = ViewGroup.LayoutParams.MATCH_PARENT;
+        root.setLayoutParams(rootParams);
+        expandToWindow(root);
+        // 滚动区吃权重、不再用 maxHeight 手算上限，剩余空间全部由它吃掉。
+        LinearLayoutCompat.LayoutParams scrollParams = (LinearLayoutCompat.LayoutParams) scroll.getLayoutParams();
+        scrollParams.height = 0;
+        scrollParams.weight = 1;
+        scroll.setLayoutParams(scrollParams);
+        scroll.setMaxHeight(0);
+    }
+
+    /**
+     * 铺满整页：把 root 之上的 Material 弹窗面板（{@code @id/custom} → customPanel → parentPanel）
+     * 一并改成 match_parent。
+     *
+     * <p>它们默认 wrap_content，内容比窗口短时会让 root 的 match_parent 退化成“按内容高度”，
+     * 页面底部留出空隙、底部按钮区不贴底。改成 match_parent 后窗口高度一路直达 root，
+     * 剩余空间全部由权重滚动区吃掉；DecorView 的参数不是 MarginLayoutParams，循环到那里自然结束。
+     */
+    private static void expandToWindow(View root) {
+        for (ViewParent parent = root.getParent(); parent instanceof ViewGroup; parent = parent.getParent()) {
+            ViewGroup group = (ViewGroup) parent;
+            ViewGroup.LayoutParams params = group.getLayoutParams();
+            if (!(params instanceof ViewGroup.MarginLayoutParams)) break;
+            params.height = ViewGroup.LayoutParams.MATCH_PARENT;
+            group.setLayoutParams(params);
+        }
     }
 
     @Override
@@ -216,6 +256,13 @@ public class CustomCspDialog extends BaseAlertDialog {
             if (checkedId == R.id.uiMode && !showTextMode(false)) binding.modeGroup.check(R.id.textMode);
         });
         setupScrollableText(binding.jsonText);
+        binding.siteSearch.addTextChangedListener(new CustomTextListener() {
+            @Override
+            public void afterTextChanged(Editable editable) {
+                adapter.setSearchQuery(editable == null ? "" : editable.toString());
+                updateModeVisibility();
+            }
+        });
         binding.add.setOnClickListener(view -> addItem());
         binding.recognize.setOnClickListener(view -> showRecognizePanel());
         binding.sort.setOnClickListener(view -> setSortMode(!sortMode));
@@ -309,8 +356,11 @@ public class CustomCspDialog extends BaseAlertDialog {
 
     private void updateModeVisibility() {
         boolean listMode = !textMode && !editMode;
-        boolean mobileSort = Util.isMobile() && listMode;
+        boolean searchMode = listMode && !sortMode;
+        boolean mobileSort = Util.isMobile() && listMode && !adapter.hasSearchQuery();
         binding.recycler.setVisibility(listMode ? View.VISIBLE : View.GONE);
+        binding.searchLayout.setVisibility(searchMode ? View.VISIBLE : View.GONE);
+        binding.searchEmpty.setVisibility(searchMode && adapter.hasSearchQuery() && adapter.getItemCount() == 0 ? View.VISIBLE : View.GONE);
         binding.jsonLayout.setVisibility(textMode && !editMode ? View.VISIBLE : View.GONE);
         binding.editPanel.setVisibility(editMode ? View.VISIBLE : View.GONE);
         binding.add.setVisibility(listMode && !sortMode ? View.VISIBLE : View.GONE);
@@ -325,7 +375,7 @@ public class CustomCspDialog extends BaseAlertDialog {
     }
 
     private void setSortMode(boolean sort) {
-        if (sort && (!Util.isMobile() || textMode || editMode)) return;
+        if (sort && (!Util.isMobile() || textMode || editMode || adapter.hasSearchQuery())) return;
         if (sortMode == sort) {
             updateModeVisibility();
             return;
@@ -1329,36 +1379,60 @@ public class CustomCspDialog extends BaseAlertDialog {
     private class CspAdapter extends RecyclerView.Adapter<CspAdapter.ViewHolder> {
 
         private final List<CustomCspSetting.Item> items;
+        private final List<Integer> visibleIndices = new ArrayList<>();
         private boolean reverseOrder;
         private boolean sortMode;
+        private String searchQuery = "";
 
         CspAdapter(List<CustomCspSetting.Item> items) {
             this.items = items;
+            refreshVisibleIndices();
         }
 
         List<CustomCspSetting.Item> getItems() {
             return items;
         }
 
+        boolean hasSearchQuery() {
+            return !TextUtils.isEmpty(searchQuery.trim());
+        }
+
+        void setSearchQuery(String query) {
+            String value = query == null ? "" : query;
+            if (TextUtils.equals(searchQuery, value)) return;
+            searchQuery = value;
+            refreshVisibleIndices();
+            notifyDataSetChanged();
+        }
+
+        private void refreshVisibleIndices() {
+            visibleIndices.clear();
+            for (int i = 0; i < items.size(); i++) {
+                if (!hasSearchQuery() || CustomCspSetting.matchesSearch(items.get(i), searchQuery)) visibleIndices.add(i);
+            }
+        }
+
         int add(CustomCspSetting.Item item) {
             items.add(item);
+            refreshVisibleIndices();
             markJsonDirty();
-            int position = displayPosition(items.size() - 1);
-            notifyItemInserted(position);
-            return position;
+            notifyDataSetChanged();
+            return displayPosition(items.size() - 1);
         }
 
         void replace(int position, CustomCspSetting.Item item) {
             if (position < 0 || position >= items.size()) return;
             CustomCspSetting.Item old = items.set(position, item);
             if (!old.isLive() && old.site().getKey().equals(registry.getHomeKey())) registry.setHomeKey(item.isLive() ? "" : item.site().getKey());
+            refreshVisibleIndices();
             markJsonDirty();
-            notifyItemChanged(displayPosition(position));
+            notifyDataSetChanged();
         }
 
         void setItems(List<CustomCspSetting.Item> items) {
             this.items.clear();
             this.items.addAll(items);
+            refreshVisibleIndices();
             markJsonDirty();
             notifyDataSetChanged();
         }
@@ -1385,17 +1459,18 @@ public class CustomCspDialog extends BaseAlertDialog {
         }
 
         int moveDisplay(int fromPosition, int toPosition) {
-            if (fromPosition < 0 || toPosition < 0 || fromPosition >= items.size() || toPosition >= items.size()) return -1;
+            if (hasSearchQuery() || fromPosition < 0 || toPosition < 0 || fromPosition >= getItemCount() || toPosition >= getItemCount()) return -1;
             return moveItemToIndex(itemIndex(fromPosition), itemIndex(toPosition));
         }
 
         int moveItemToIndex(int fromIndex, int toIndex) {
-            if (fromIndex < 0 || toIndex < 0 || fromIndex >= items.size() || toIndex >= items.size()) return -1;
+            if (hasSearchQuery() || fromIndex < 0 || toIndex < 0 || fromIndex >= items.size() || toIndex >= items.size()) return -1;
             if (fromIndex == toIndex) return displayPosition(toIndex);
             int fromPosition = displayPosition(fromIndex);
             int toPosition = displayPosition(toIndex);
             CustomCspSetting.Item item = items.remove(fromIndex);
             items.add(toIndex, item);
+            refreshVisibleIndices();
             markJsonDirty();
             notifyItemMoved(fromPosition, toPosition);
             notifyItemRangeChanged(Math.min(fromPosition, toPosition), Math.abs(fromPosition - toPosition) + 1);
@@ -1403,23 +1478,30 @@ public class CustomCspDialog extends BaseAlertDialog {
         }
 
         void remove(int position, View removed) {
-            if (position < 0 || position >= items.size()) return;
+            if (position < 0 || position >= getItemCount()) return;
             int index = itemIndex(position);
+            if (index < 0 || index >= items.size()) return;
             focusBeforeRemove(removed);
             CustomCspSetting.Item item = items.remove(index);
             if (!item.isLive() && item.site().getKey().equals(registry.getHomeKey())) registry.setHomeKey("");
             if (!TextUtils.isEmpty(item.getId())) pendingDeleteIds.add(item.getId());
+            refreshVisibleIndices();
             markJsonDirty();
             notifyDataSetChanged();
+            updateModeVisibility();
         }
 
         int itemIndex(int position) {
-            return reverseOrder ? items.size() - 1 - position : position;
+            if (position < 0 || position >= visibleIndices.size()) return -1;
+            int visiblePosition = reverseOrder ? visibleIndices.size() - 1 - position : position;
+            return visibleIndices.get(visiblePosition);
         }
 
         int displayPosition(int index) {
             if (index < 0 || index >= items.size()) return -1;
-            return reverseOrder ? items.size() - 1 - index : index;
+            int visiblePosition = visibleIndices.indexOf(index);
+            if (visiblePosition < 0) return -1;
+            return reverseOrder ? visibleIndices.size() - 1 - visiblePosition : visiblePosition;
         }
 
         void setHome(CustomCspSetting.Item item) {
@@ -1432,7 +1514,7 @@ public class CustomCspDialog extends BaseAlertDialog {
 
         @Override
         public int getItemCount() {
-            return items.size();
+            return visibleIndices.size();
         }
 
         @NonNull
@@ -1450,6 +1532,7 @@ public class CustomCspDialog extends BaseAlertDialog {
         @Override
         public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
             int index = itemIndex(position);
+            if (index < 0 || index >= items.size()) return;
             holder.bind(items.get(index), index);
         }
 
@@ -1499,6 +1582,11 @@ public class CustomCspDialog extends BaseAlertDialog {
                 } else {
                     AppCompatImageButton up = iconButton(R.drawable.ic_subtitle_up, R.string.setting_custom_csp_up, view -> move(getBindingAdapterPosition(), getBindingAdapterPosition() - 1));
                     AppCompatImageButton down = iconButton(R.drawable.ic_subtitle_down, R.string.setting_custom_csp_down, view -> move(getBindingAdapterPosition(), getBindingAdapterPosition() + 1));
+                    boolean canMove = !hasSearchQuery();
+                    up.setEnabled(canMove);
+                    down.setEnabled(canMove);
+                    up.setAlpha(canMove ? 1.0f : 0.45f);
+                    down.setAlpha(canMove ? 1.0f : 0.45f);
                     linkCardFocus(root, up);
                     linkCardFocus(root, down);
                     header.addView(up, iconLayout(8));
