@@ -661,8 +661,15 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
             logSurfaceState("attach after setRender target=" + targetRender);
         }
         surfaceDiagnostics.bind(getExoView(), player().getPlaybackTraceId());
-        if (getExoView().getPlayer() == null) {
-            getExoView().setPlayer(player().getPlayer());
+        // 切集换新媒体前 PlayerManager.clear() 会把 spec 置空，preparePlayer() 再重建引擎。
+        // 此时 render 值通常不变，旧的 attachSurface 只按“PlayerView 是否为空”判断，
+        // 会把已释放的旧引擎继续留在 PlayerView 上，新引擎从未绑定 Surface。
+        // 以引擎实例身份而不是“是否为空”判断，自动下一集的黑屏路径才能强制重绑。
+        Player currentPlayer = getExoView().getPlayer();
+        Player nextPlayer = player().getPlayer();
+        if (currentPlayer != nextPlayer) {
+            if (currentPlayer != null) getExoView().setPlayer(null);
+            getExoView().setPlayer(nextPlayer);
             logSurfaceState("attach after setPlayer");
             syncVideoSurfaceSize(null);
             if (restoreExoShutter) syncShutter();
