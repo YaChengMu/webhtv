@@ -632,6 +632,24 @@ Resolver 必须执行，静态检查必须验证：
 - 已落地：关于弹窗三按钮+齿轮、追更页顶栏与卡片按钮（`focus_ring_primary/secondary/error.xml`
   状态色表；契约测试 `TvFocusRingContractTest` 固化 R1/R2/R3）。
 
+**电视版焦点环的宿主分层规则（2026-10-09 补充）**：
+
+环色不能一律取 `?attr/tvFocusRing`——**宿主背景决定环色必须来自哪里**，否则会把「蓝白不一致」
+换成「焦点看不见」。逐对计算 WCAG 对比度后确定三层：
+
+| 宿主层 | 背景特性 | 环色来源 | 反例实测对比度 |
+| --- | --- | --- | --- |
+| 调色板表面 / 对话框面板 | 跟随调色板 | `?attr/tvFocusRing`，或焦点态填充的配对 on-色 | day 浅底上白色环只有 1.22:1 |
+| 固定明暗面板（`shape_dialog_glass_panel`、`shape_exit_confirm_dialog`、`shape_ad_stats_content`…） | 两张表相同 | 与调色板无关的常量（白或深蓝），**只统一宽度** | 深色玻璃上 `?attr/tvFocusRing` 只有 1.91:1；固定浅色面板上 night 浅蓝只有 1.6:1 |
+| 视频画面 / 透明控制条 | 不可预测 | 与调色板无关的白色，**只统一宽度** | 浅色表的深蓝环在视频/玻璃控制层无可用对比度 |
+
+同层内不得再出现第二种宽度或第二种环色语义。已落地：首页功能按钮行与内容卡片行
+（`shape_item_focused` vs `shape_vod_focused`）统一为 `@dimen/webhtv_focus_ring_width` +
+`?attr/tvFocusRing`；固定明暗宿主与视频层的 10 个 drawable 只统一宽度。
+契约测试 `TvFocusRingContractTest.appSurfaceFocusRingsShareOneWidthTokenAndAThemeColour`
+固化分层清单，`TvAppSurfaceFocusRingDeviceTest` 用真实栅格化逐像素量厚度与颜色
+（含 day/night 跟随与变异检验）。
+
 ### 9.2 输入框
 
 - 统一 `Widget.Material3.TextInputLayout.OutlinedBox` 或迁移后的 `Widget.WebHTV.Input.Outlined`。

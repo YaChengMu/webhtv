@@ -47,6 +47,8 @@ public class TvFocusRingContractTest {
     private static final String TOKENS_LIGHT = "app/src/main/res/values/webhtv_tokens.xml";
     private static final String TOKENS_NIGHT = "app/src/main/res/values-night/webhtv_tokens.xml";
 
+    private static final String LEANBACK_DRAWABLE = "app/src/leanback/res/drawable/";
+
     // ------------------------------------------------------------ R3 主题控制
 
     @Test
@@ -126,6 +128,104 @@ public class TvFocusRingContractTest {
             // 环色只允许来自主题 token，不允许写死十六进制。
             assertFalse(item[0] + " 不允许出现硬编码环色", body.matches(".*android:color=\"#.*"));
         }
+    }
+
+    // ------------------------------------------------------------ R2 应用表面唯一宽度
+
+    /**
+     * 用户报告（两张实机截图）：同一个电视首页上，「搜索/历史」两行功能按钮是**蓝色**边框，
+     * 「最近观看」内容卡片是**白色**边框，且两边粗细不同。
+     *
+     * <p>根因是应用表面的焦点环分裂成两族：
+     * <ul>
+     *   <li>{@code shape_item_focused} / {@code shape_item_round_focused} 写
+     *       {@code 1.5dp ?attr/colorPrimary}（蓝）；</li>
+     *   <li>{@code shape_vod_focused} / {@code shape_vod_oval_focused} / {@code shape_keyboard_focused} /
+     *       {@code shape_search_hot_word_focused} / {@code shape_chip_*_focused} 写
+     *       {@code 1.5dp/2dp @color/white}（白，完全不随主题走）；</li>
+     *   <li>{@code shape_config_history_item_focused} / {@code shape_site_item_*} /
+     *       {@code shape_group_button_focused} 写 {@code 2dp}。</li>
+     * </ul>
+     *
+     * <p>本测试把这些应用表面（宿主为调色板表面或对话框面板）的焦点环钉死到统一取值：
+     * 宽度必须引用 {@code @dimen/webhtv_focus_ring_width}，环色必须走 {@code ?attr/tvFocusRing}
+     * 或它配对的主题角色（{@code ?attr/colorOnPrimary} / {@code ?attr/colorPrimary} /
+     * {@code ?attr/colorPrimaryContainer}），不得再写死 {@code @color/white} 或 {@code #FFFFFF}。
+     *
+     * <p><b>视频层刻意不在本约束内</b>：{@code shape_chip_focused}（播放页解析线路）、
+     * {@code shape_chip_round_focused}（直播源弹窗）、{@code shape_video_focused}（画面框）、
+     * {@code shape_subtitle_*_focused}（字幕工具栏）、{@code shape_live_focused}（直播抽屉）、
+     * {@code selector_control_sheet_button} 与 {@code selector_exit_confirm_*}
+     * 叠在视频画面或固定明暗的玻璃面板上，改走调色板会让浅色表的深蓝环贴在深底上（实测
+     * 1.91:1）或在夜间表的浅底上消失。它们只统一宽度，环色保持与调色板无关。
+     */
+    @Test
+    public void appSurfaceFocusRingsShareOneWidthTokenAndAThemeColour() throws Exception {
+        // 应用表面焦点环：宿主是调色板表面/对话框面板，环色必须跟随主题。
+        String[][] themed = {
+                {"shape_item_focused.xml", "?attr/tvFocusRing"},
+                {"shape_item_round_focused.xml", "?attr/tvFocusRing"},
+                {"shape_item_selected.xml", "?attr/tvFocusRing"},
+                {"shape_vod_focused.xml", "?attr/tvFocusRing"},
+                {"shape_vod_oval_focused.xml", "?attr/tvFocusRing"},
+                {"shape_keyboard_focused.xml", "?attr/tvFocusRing"},
+                {"shape_search_hot_word_focused.xml", "?attr/tvFocusRing"},
+                // 自带主题色填充的控件：环色取焦点态填充的配对角色，同样由主题解析器保证对比度。
+                {"shape_config_history_item_focused.xml", "?attr/colorOnPrimary"},
+                {"shape_site_item_focused.xml", "?attr/colorOnPrimary"},
+                {"shape_site_item_selected.xml", "?attr/colorPrimary"},
+                {"shape_group_button_focused.xml", "?attr/colorOnPrimary"},
+        };
+        for (String[] entry : themed) {
+            String path = LEANBACK_DRAWABLE + entry[0];
+            String body = values(read(path));
+            assertTrue(path + " 的焦点环必须引用唯一宽度 token " + WIDTH,
+                    body.contains("android:width=\"" + WIDTH + "\""));
+            assertTrue(path + " 的环色必须取主题角色 " + entry[1] + "，不能写死",
+                    body.contains("android:color=\"" + entry[1] + "\""));
+            assertFalse(path + " 不允许再写死白色焦点环",
+                    body.contains("android:color=\"@color/white\"") || body.contains("android:color=\"#FFFFFF\""));
+            assertFalse(path + " 不允许再写死描边宽度（1.5dp/2dp/3dp）",
+                    body.matches("(?s).*android:width=\"[0-9.]+dp\".*"));
+        }
+
+        // 视频层/固定明暗宿主：只统一宽度，环色保持与调色板无关。
+        String[] paletteIndependent = {
+                "shape_chip_focused.xml",
+                "shape_chip_round_focused.xml",
+                "shape_live_focused.xml",
+                "shape_video_focused.xml",
+                "shape_subtitle_focused.xml",
+                "shape_subtitle_pressed.xml",
+        };
+        for (String name : paletteIndependent) {
+            String path = LEANBACK_DRAWABLE + name;
+            String body = values(read(path));
+            assertTrue(path + " 的焦点环必须引用唯一宽度 token " + WIDTH,
+                    body.contains("android:width=\"" + WIDTH + "\""));
+            assertFalse(path + " 不允许再写死描边宽度",
+                    body.matches("(?s).*android:width=\"[0-9.]+dp\".*"));
+        }
+    }
+
+    /**
+     * 回归门：同一个电视页面上的两族焦点环不得再分叉。
+     *
+     * <p>首页同时渲染功能按钮行（{@code adapter_func} → {@code selector_item}）与内容卡片行
+     * （{@code adapter_vod} → {@code selector_vod}），两者就是用户截图里「上面蓝色、下面白色」
+     * 的那一对。它们的焦点态环色必须来自同一个主题属性，宽度来自同一个 token。
+     */
+    @Test
+    public void homeFunctionButtonsAndContentCardsShareTheSameRingSpec() throws Exception {
+        String button = values(read(LEANBACK_DRAWABLE + "shape_item_focused.xml"));
+        String card = values(read(LEANBACK_DRAWABLE + "shape_vod_focused.xml"));
+        for (String body : new String[]{button, card}) {
+            assertTrue("首页两族焦点环必须同宽", body.contains("android:width=\"" + WIDTH + "\""));
+            assertTrue("首页两族焦点环必须同色（主题 FOCUS 槽）", body.contains("android:color=\"?attr/tvFocusRing\""));
+        }
+        // 消费方必须仍然分别指向这两个 selector，否则本断言就不再覆盖用户报告的控件。
+        assertTrue(read("app/src/leanback/res/drawable/selector_item.xml").contains("@drawable/shape_item_focused"));
+        assertTrue(read("app/src/leanback/res/drawable/selector_vod.xml").contains("@drawable/shape_vod_focused"));
     }
 
     // ------------------------------------------------------------ R2 统一机制与宽度

@@ -1,4 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    电视版「视频层」方角芯片（播放页解析线路 chip，宿主 view_control_vod.xml 是叠加在视频画面
+    上的透明控制条）的统一焦点环。
+
+    这里只统一**宽度**（@dimen/webhtv_focus_ring_width，3dp；此前是 1.5dp，与同一播放页
+    其它芯片的 3dp 不一致），环色刻意保持与调色板无关的白色。
+
+    理由（与 shape_chip_round_focused.xml 同一判据）：该控件直接叠在视频画面上，宿主背景是
+    {@code @color/transparent}，没有任何调色板表面可以保证对比度。若改取 ?attr/tvFocusRing，
+    浅色表的 FOCUS 槽（深蓝）画在播放页控制层（shape_dialog_control_glass_panel，固定深靛玻璃）
+    上只有约 1.9:1，焦点环会看不见；白色约 12:1。
+
+    这条边界与仓库既有契约一致：播放器视频层焦点（selector_control_sheet_button、
+    shape_video_focused、shape_subtitle_focused、shape_live_focused）保持白色不变
+    （见 docs/TV-FOCUS-RING-20261004-unified-theme-ring.md 的非目标一节）。
+    宿主为调色板表面的应用页面焦点环见 shape_item_focused.xml / shape_vod_focused.xml。
+-->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
 
@@ -11,7 +28,7 @@
         android:top="8dp" />
 
     <stroke
-        android:width="1.5dp"
+        android:width="@dimen/webhtv_focus_ring_width"
         android:color="@color/white" />
 
 </shape>

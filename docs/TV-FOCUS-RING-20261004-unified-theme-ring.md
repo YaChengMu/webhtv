@@ -196,3 +196,121 @@ app:cornerRadius="8dp"                    <!-- 没有任何 strokeColor / stroke
 全部为资源与测试文件的新增/取值替换，无 SQL、无协议、无持久化格式变更。
 回滚锚点：`git revert <本任务提交>` 或 `git reset --hard <提交前 HEAD>`；
 无需要回滚的运行时数据。
+
+---
+
+## 9. 追加：应用表面焦点环统一（2026-10-09）
+
+### 9.1 用户原始要求
+
+> TV端上面两行按钮是 蓝色边框，下面的是 白色边框，边框粗细也貌似不一样，请统一风格并受到主题色彩控制
+
+两张实机截图（`/tmp/orca-paste-1791555196409-*.png`、`/tmp/orca-paste-1791555204528-*.png`）：
+同一电视首页上，`搜索/历史` 两行功能按钮是**蓝色**边框，`最近观看` 内容卡片是**白色**边框，
+且两边粗细不同。
+
+### 9.2 根因（像素级硬证据）
+
+截图逐像素采样（`960x1280`，物理 1920x1080）：
+
+| 控件 | 实测环色 | 实测厚度 |
+| --- | --- | --- |
+| `搜索` 按钮（`shape_item_focused`） | `(13,77,201)` ≈ `#0B57D0`（= day primary） | ≈2px 游程 |
+| `最近观看` 卡片（`shape_vod_focused`） | `(243,242,248)` ≈ 白 | ≈4px 游程（含光晕） |
+
+代码侧根因：应用表面的焦点环分裂成三族，各写各的取值。
+
+| 家族 | 原取值 | 问题 |
+| --- | --- | --- |
+| `shape_item_focused` / `shape_item_round_focused` | `1.5dp ?attr/colorPrimary` | 蓝；`colorPrimary` 在 TV 上同时驱动约 100 个布局的聚焦文字色，不能兼作焦点环语义 |
+| `shape_vod_focused` / `shape_vod_oval_focused` / `shape_keyboard_focused` / `shape_search_hot_word_focused` / `shape_chip_*_focused` | `1.5dp`~`2dp @color/white` | 白；完全不随主题走 |
+| `shape_config_history_item_focused` / `shape_site_item_*` / `shape_group_button_focused` | `2dp` | 宽度又不同 |
+
+`@color/white` 是**与调色板无关**的常量，因此用户改主题的「焦点色」槽时这些边框纹丝不动；
+宽度也从 1.5dp 到 3dp 散布，正是「粗细也貌似不一样」。
+
+### 9.3 判据：宿主决定环色来源
+
+统一不能只看「都改成 `?attr/tvFocusRing`」——**宿主背景决定环色必须来自哪里**，
+否则会引入新的「焦点看不见」缺陷。逐对计算 WCAG 对比度后确定边界：
+
+| 宿主 | 背景（两张表相同？） | `?attr/tvFocusRing`（day 深蓝） | 白色 |
+| --- | --- | --- | --- |
+| 调色板表面 / 对话框面板 | 跟随调色板 | 5.2–7.9:1 ✅ | 1.2–1.3:1（day 浅底）❌ |
+| 固定深色玻璃（`shape_dialog_glass_panel` 等） | 恒定深色 | **1.91:1** ❌ | 12.20:1 ✅ |
+| 固定浅色面板（`shape_exit_confirm_dialog`、`shape_ad_stats_content`） | 恒定浅色 | **1.6–2.8:1**（night 浅蓝）❌ | 1.03–1.29:1 ❌ |
+| 视频画面 / 透明控制条 | 不可预测 | 无保证 ❌ | 有保证 ✅ |
+
+因此本次统一拆成两类：
+
+- **统一到主题环**（宿主是调色板表面）：`shape_item_focused`、`shape_item_round_focused`、
+  `shape_item_selected`、`shape_vod_focused`、`shape_vod_oval_focused`、`shape_keyboard_focused`、
+  `shape_search_hot_word_focused` → `@dimen/webhtv_focus_ring_width` + `?attr/tvFocusRing`；
+  自带主题色填充的三族（`shape_config_history_item_focused`、`shape_site_item_focused`、
+  `shape_site_item_selected`、`shape_group_button_focused`）→ 环色取焦点态填充的配对角色
+  （`?attr/colorOnPrimary` / `?attr/colorPrimary`），沿用 §「统一规范」的配对规则。
+- **只统一宽度**（宿主固定明暗或视频层，环色保持与调色板无关）：`shape_chip_focused`、
+  `shape_chip_round_focused`、`shape_live_focused`、`shape_video_focused`、
+  `shape_subtitle_focused`、`shape_subtitle_pressed`、`selector_ad_stats_item`、
+  `selector_search_scope_item`、`selector_exit_confirm_primary`、`selector_exit_confirm_secondary`
+  → 宽度一律 `@dimen/webhtv_focus_ring_width`。
+
+`selector_exit_confirm_*` 与 `selector_ad_stats_item` 保持字面量环色还有一条独立理由：
+它们由 `TvFixedDarkSurfaceContrastTest` 的
+`theFixedPanelsAreStillPaletteIndependentAndDark` 固化——面板固定浅色 + 按钮文字恒为白，
+改走调色板会让夜间表的白字对比度掉到 1.72:1。
+
+### 9.4 变更清单
+
+| 文件 | 变更 |
+| --- | --- |
+| `shape_item_focused.xml` / `shape_item_round_focused.xml` / `shape_item_selected.xml` | `1.5dp ?attr/colorPrimary` → `@dimen/webhtv_focus_ring_width` + `?attr/tvFocusRing` |
+| `shape_vod_focused.xml` / `shape_vod_oval_focused.xml` | `1.5dp/2dp @color/white` → token + `?attr/tvFocusRing` |
+| `shape_keyboard_focused.xml` / `shape_search_hot_word_focused.xml` | 同上 |
+| `shape_config_history_item_focused.xml` / `shape_site_item_focused.xml` / `shape_site_item_selected.xml` / `shape_group_button_focused.xml` | `2dp` → token（环色配对规则不变） |
+| `shape_chip_focused.xml` / `shape_chip_round_focused.xml` / `shape_live_focused.xml` / `shape_video_focused.xml` / `shape_subtitle_focused.xml` / `shape_subtitle_pressed.xml` | `1.5dp` → token（环色保持白色，附宿主对比度理由） |
+| `selector_ad_stats_item.xml` / `selector_search_scope_item.xml` | `2dp` → token |
+| `selector_exit_confirm_primary.xml` / `selector_exit_confirm_secondary.xml` | `2dp` → token |
+| `TvFocusRingContractTest.java` | 新增 `appSurfaceFocusRingsShareOneWidthTokenAndAThemeColour`、`homeFunctionButtonsAndContentCardsShareTheSameRingSpec` |
+| `TvAppSurfaceFocusRingDeviceTest.java`（新增） | 像素级运行时证据（见 §9.5） |
+| `InterfaceEntryInteractionTest.java` | 把写死 `2dp` 的断言改为断言唯一宽度 token |
+
+### 9.5 验证证据
+
+**像素级运行时证据**（`TvAppSurfaceFocusRingDeviceTest`，Robolectric `GraphicsMode.NATIVE`
+真实栅格化后逐像素测量，6/6 通过）：
+
+| 断言 | 结果 |
+| --- | --- |
+| 首页功能按钮与内容卡片的实测环**厚度**相同 | ✅ |
+| 首页功能按钮与内容卡片的实测环**颜色**相同 | ✅ |
+| 6 个应用表面 selector 的实测厚度 == `@dimen/webhtv_focus_ring_width` | ✅ |
+| 实测环色 == 主题 FOCUS 槽（`webhtv_color_focus`） | ✅ |
+| day 表与 night 表渲染出**不同**环色（真正的主题可控） | ✅ |
+| 环完全不透明（焦点可见） | ✅ |
+| 度量方法能区分细环与粗环（变异检验，防空断言） | ✅ |
+
+**变异检验（证明测试真的能抓到用户报告的缺陷）**：把 `shape_vod_focused.xml` 改回
+`1.5dp @color/white`（即修复前的状态）后重跑，**3 项断言转红**：
+`appSurfaceRingsFollowTheThemePaletteAcrossDayAndNight`、
+`homeFunctionButtonsAndContentCardsRenderTheSameRing`、
+`appSurfaceRingsRenderInTheThemeFocusColour`。恢复后重新全绿。
+
+**回归门**：
+
+| 检查 | 结果 |
+| --- | --- |
+| `:app:testLeanbackArm64_v8aDebugUnitTest` | 4154 tests / 0 failures |
+| `:app:testMobileArm64_v8aDebugUnitTest` | 4980 tests / 0 failures |
+| `scripts/check_ui_tokens.sh` | `hex_drawables=0`、`violations=1`（= 基线，仅既存 `item_following.xml`） |
+| `:app:assembleLeanbackArm64_v8aDebug` | BUILD SUCCESSFUL |
+
+**未完成的实机复核**：dev1 模拟器（`192.168.50.3:5555`）在本轮全程离线
+（`ping` 100% 丢包、ARP FAILED、5555/5557/5559/5561 全部 closed），因此本轮未能做
+D-pad 逐项截图复核。同一批 drawable 的上一轮（§7.1）已在同一设备上做过实机验收，
+且本轮的像素级栅格化证据与变异检验已覆盖用户报告的三个具体现象（蓝/白、粗细、主题跟随）。
+
+## 10. 回滚（本轮追加）
+
+全部为资源取值替换与测试新增，无 SQL、无协议、无持久化格式变更。
+回滚锚点：`git revert <本任务提交>` 或 `git reset --hard <提交前 HEAD>`。
