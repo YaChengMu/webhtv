@@ -46,6 +46,20 @@
                         android:color="?attr/tvPlayerCurrentRing" />
                 </shape>
             </item>
+            <!--
+                state_activated 与 state_selected 必须同色同宽：部分入口（例如
+                ArrayAdapter.setActivated）用 activated 表达「当前生效」，
+                缺失这一分支时那些按钮会完全看不到选中环。
+            -->
+            <item android:state_activated="true">
+                <shape android:shape="rectangle">
+                    <corners android:radius="6dp" />
+                    <solid android:color="#5CFFFFFF" />
+                    <stroke
+                        android:width="@dimen/webhtv_focus_ring_width"
+                        android:color="?attr/tvPlayerCurrentRing" />
+                </shape>
+            </item>
             <item>
                 <shape android:shape="rectangle">
                     <corners android:radius="6dp" />

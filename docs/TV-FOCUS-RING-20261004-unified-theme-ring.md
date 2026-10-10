@@ -707,3 +707,92 @@ Javadoc 里，豁免列表本身即契约。
   `selector_video_item` 的两个宽度改回 `3dp`/`2dp`。
 - 槽位：移除 `SlotSet.playerCurrent` 与 `ThemeEditor.Slot.PLAYER_CURRENT` 及编辑器分组。
 - 派生：移除 `ThemeResolver` 的两个环色派生与 `ThemeTokens` 的两个分量。
+
+## 15. 追加：修复对话框主题属性缺失回归 + 收口代码挂环的硬编码宽度（2026-10-10 第四轮）
+
+### 15.1 用户原始要求
+
+> 现在选中播放器看不出选中的效果，好像是黑色的边框，不应该是统一的选中边框颜色吗？
+> 还有个性推荐等卡片的边框粗细没有改小没有统一
+
+### 15.2 缺陷一：对话框主题解析不到 `tv*` 属性（上一轮引入的回归）
+
+§14 把 `selector_control_sheet_button`（播放器控制面板按钮）的焦点环从**写死半透明白**
+改成了 `?attr/tvPlayerRing` / `?attr/tvPlayerCurrentRing`。但这两个属性当时只在
+`Theme.Base`（= `Theme.App`）里绑定，而：
+
+| 对话框 | 主题来源 | 是否继承 `Theme.WebHTV` |
+| --- | --- | --- |
+| 播放器控制面板 `ControlDialog`（BottomSheet） | `bottomSheetDialogTheme` = Material 默认 `ThemeOverlay.Material3.BottomSheetDialog` | **否** |
+| Alert 对话框 | `Theme.WebHTV.Dialog`，父主题 `Theme.Material3.DayNight.Dialog.Alert` | **否** |
+
+属性解析不到时，`?attr/xxx` **静默退化为黑色/透明，且不崩溃**。Robolectric 实测（修复前）：
+
+```
+Theme_App (Activity)          tvPlayerRing -> #FF447BF5   ✓
+Theme.WebHTV.Dialog           tvPlayerRing -> UNRESOLVED   ← 黑框来源
+裸 ThemeOverlay.Material3.BottomSheetDialog  -> UNRESOLVED  ← 黑框来源
+```
+
+复现的渲染结果（`dialog_control#player`）：修复前 `activated` 分支**完全无描边**，
+修复后 `focus=#FF447BF5 / selected=#FF00A95A / activated=#FF00A95A`。
+
+**修法**：在 `Theme.WebHTV`（基底）、`Theme.WebHTV.Dialog`、`ThemeOverlay.WebHTV.Dialog`
+三处都绑定全部五项 `tv*` 属性；`selector_control_sheet_button` 补上缺失的
+`state_activated` 分支（与 `state_selected` 同色同宽——部分入口用
+`ArrayAdapter.setActivated` 表达「当前生效」，缺该分支就完全看不到选中环）。
+
+**新增防回归契约** `ThemeContractTest.everyReferencedTvFocusAttrIsAssignedByATheme`：
+扫描全部 `?attr/tv*` 引用，断言每个都被至少一个主题 style 赋值，且基底主题
+`Theme.WebHTV` 自带全部五项。这类回归不崩溃、只有人眼能发现，必须由测试钉住。
+
+### 15.3 缺陷二：代码挂环的控件漏掉了宽度统一
+
+前几轮统一的是 **drawable 层**的环宽，但有一批控件是**代码挂环**
+（直接 `setStrokeWidth` / `GradientDrawable.setStroke`），全部漏掉：
+
+| 位置 | 旧值 | 说明 |
+| --- | --- | --- |
+| `TmdbRecommendationPresenter` | `FOCUS_WIDTH_DP = 3` | 个性推荐卡（用户报告的直接对象） |
+| `TmdbCardFocusHelper` | `FOCUS_STROKE_DP = 3` | 详情页多张卡共用的助手 |
+| `TmdbEpisodeAdapter` | `FOCUS_STROKE_DP = 3` | 原生增强选集卡 |
+| `TmdbVideoAdapter` | `focused ? 2 : 1` | 相关视频卡 |
+| `InlineEpisodeAdapter` | `active \|\| focused ? 2 : 1` | 内嵌选集芯片 |
+| `TmdbDetailActivity` | `FOCUS_STROKE_DP = 3`（**11 处**） | 详情页面板/按钮/芯片 |
+
+**修法**：全部改为从 `@dimen/webhtv_focus_ring_width` 读像素
+（`focusRingWidthPx()` 助手 / `getDimensionPixelSize`），`TmdbCardFocusHelper.foregroundBorder`
+的参数语义从 dp 改为 px（避免又一次隐式 dp 写死）。`TmdbRecommendationPresenter` 的环色
+也改为 `ThemeController.focusRingColor()`（原来直接取 `R.color.tv_item_focus_ring` 常量，
+绕过了主题覆写通道）。
+
+**新增防回归契约** `TvFocusRingContractTest.noJavaCodeHardcodesAFocusRingWidth`：
+扫描 9 个 Java 源，找出所有「按焦点分支设描边宽度」的语句，断言其**真分支**不含
+dp 字面量或 `*_DP` 常量（实测扫到 12 处）；配套
+`noJavaCodeHardcodesAFocusRingColour` 断言环色走 `ThemeController.focusRingColor`。
+该测试在实施中真的抓出一处漏改（`TmdbDetailActivity.applyInlineEpisodeModeButtonState`）。
+
+### 15.4 本轮验证证据
+
+| 检查 | 结果 |
+| --- | --- |
+| `ThemeContractTest` | 全绿（新增 `everyReferencedTvFocusAttrIsAssignedByATheme`） |
+| `TvFocusRingContractTest` | 18/18（新增 `noJavaCodeHardcodesAFocusRingWidth`、`noJavaCodeHardcodesAFocusRingColour`） |
+| `:app:testLeanbackArm64_v8aDebugUnitTest` | 4166 tests / 0 failures |
+| `:app:testMobileArm64_v8aDebugUnitTest` | 4981 tests / 0 failures |
+| `scripts/check_ui_tokens.sh` | `violations=1`（= 基线）、`hex_drawables=0`、`contrast failures=0` |
+
+实机 + Robolectric 复核：
+
+| 量 | 修复前 | 修复后 |
+| --- | --- | --- |
+| `Theme.WebHTV.Dialog` / `bottomSheetDialogTheme` 的 `tvPlayerRing` | UNRESOLVED（黑框） | `#FF447BF5` |
+| `dialog_control#player` activated 态 | 无描边 | `#FF00A95A` |
+| 选集项（`selector_video_item`）焦点环 | 3dp 写死色 | **3px `#447BF5`**（dev1 实机实测 5738px） |
+| 个性推荐卡焦点环宽 | 3dp 硬编码 | `@dimen/webhtv_focus_ring_width` |
+
+### 15.5 回滚
+
+- 属性：从三个主题 style 移除 `tv*` 五项绑定，并删除 `state_activated` 分支。
+- 宽度：把 6 个 Java 位置的 `focusRingWidthPx()` 换回 `ResUtil.dp2px(3)` 常量。
+- 契约测试与本文档属记录，随代码一并回滚即可。

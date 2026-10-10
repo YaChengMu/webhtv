@@ -591,6 +591,86 @@ public class TvFocusRingContractTest {
         return normalized <= 0.04045 ? normalized / 12.92 : Math.pow((normalized + 0.055) / 1.055, 2.4);
     }
 
+    /**
+     * 上一条只扫 drawable，抓不到**代码挂环**的控件（它们直接 setStrokeWidth/setStroke）。
+     *
+     * <p>用户报告（2026-10-10）：「还有个性推荐等卡片的边框粗细没有改小没有统一」。
+     * 根因就是这类：{@code TmdbRecommendationPresenter} 写死 {@code FOCUS_WIDTH_DP = 3}、
+     * {@code TmdbCardFocusHelper} / {@code TmdbEpisodeAdapter} / {@code TmdbDetailActivity} /
+     * {@code TmdbVideoAdapter} / {@code InlineEpisodeAdapter} 各自写死 2~3dp，
+     * 它们都不经过 drawable 层，所以前几轮统一 drawable 宽度时全部漏掉。
+     *
+     * <p>本测试扫描 Java 源码：凡是「焦点态下设置描边宽度」的表达式，宽度必须来自
+     * {@code R.dimen.webhtv_focus_ring_width}（或经本类助手），不得出现 dp 字面量常量。
+     */
+    @Test
+    public void noJavaCodeHardcodesAFocusRingWidth() throws Exception {
+        // 扫描范围：所有可能挂焦点环的 Java 源。
+        String[] sources = {
+                "app/src/leanback/java/com/fongmi/android/tv/ui/presenter/TmdbRecommendationPresenter.java",
+                "app/src/leanback/java/com/fongmi/android/tv/ui/presenter/TmdbCastPresenter.java",
+                "app/src/leanback/java/com/fongmi/android/tv/ui/presenter/TmdbPhotoPresenter.java",
+                "app/src/leanback/java/com/fongmi/android/tv/ui/presenter/TmdbVideoPresenter.java",
+                "app/src/main/java/com/fongmi/android/tv/ui/adapter/TmdbCardFocusHelper.java",
+                "app/src/main/java/com/fongmi/android/tv/ui/adapter/TmdbEpisodeAdapter.java",
+                "app/src/main/java/com/fongmi/android/tv/ui/adapter/TmdbVideoAdapter.java",
+                "app/src/main/java/com/fongmi/android/tv/ui/adapter/InlineEpisodeAdapter.java",
+                "app/src/main/java/com/fongmi/android/tv/ui/activity/TmdbDetailActivity.java",
+        };
+        java.util.List<String> violations = new java.util.ArrayList<>();
+        int sites = 0;
+        for (String source : sources) {
+            String body;
+            try {
+                body = read(source);
+            } catch (Exception missing) {
+                continue;
+            }
+            // 先找出所有「按焦点分支设描边宽度」的语句（这就是代码挂环点）。
+            java.util.regex.Matcher site = java.util.regex.Pattern
+                    .compile("setStroke(?:Width)?\\([^;]{0,240}?focused\\s*\\?[^;]{0,240}?\\)")
+                    .matcher(body);
+            while (site.find()) {
+                sites++;
+                String statement = site.group().replaceAll("\\s+", " ");
+                // 取 focused ? 之后的「真分支」，直到冒号（三元）或结尾。
+                int q = statement.indexOf("focused ?");
+                String truthy = statement.substring(q + "focused ?".length());
+                int colon = truthy.indexOf(':');
+                if (colon >= 0) truthy = truthy.substring(0, colon);
+                // 真分支里不允许出现 dp 字面量常量（数字或 *_DP 常量）。
+                if (java.util.regex.Pattern.compile("\\b\\d+\\s*$").matcher(truthy.trim()).find()
+                        || java.util.regex.Pattern.compile("\\b\\d+\\s*[,)]").matcher(truthy).find()
+                        || truthy.contains("_DP")) {
+                    violations.add(source + " -> " + statement);
+                }
+            }
+        }
+        assertTrue("必须真的扫到代码挂环的焦点宽度赋值，否则本测试是空断言（实扫到 " + sites + " 处）",
+                sites >= 8);
+        assertTrue("焦点态描边宽度不得在 Java 里写死 dp，必须引用 @dimen/webhtv_focus_ring_width；"
+                + "以下仍是字面量：" + violations, violations.isEmpty());
+    }
+
+    /**
+     * 同一类遗漏的另一面：环色也不得在 Java 里写死（应走 ThemeController.focusRingColor / 主题属性）。
+     */
+    @Test
+    public void noJavaCodeHardcodesAFocusRingColour() throws Exception {
+        String[] sources = {
+                "app/src/leanback/java/com/fongmi/android/tv/ui/presenter/TmdbRecommendationPresenter.java",
+                "app/src/main/java/com/fongmi/android/tv/ui/adapter/TmdbCardFocusHelper.java",
+                "app/src/main/java/com/fongmi/android/tv/ui/adapter/TmdbEpisodeAdapter.java",
+        };
+        for (String source : sources) {
+            String body = read(source);
+            assertFalse(source + " 不得写死焦点环色（旧的 #FFD166 家族）",
+                    body.contains("0xFFD166") || body.contains("#FFD166") || body.contains("0xFFFFD166"));
+            assertTrue(source + " 的焦点环色必须走 ThemeController.focusRingColor",
+                    body.contains("ThemeController.focusRingColor"));
+        }
+    }
+
     // ------------------------------------------------------------ R2 统一机制与宽度
 
     /**

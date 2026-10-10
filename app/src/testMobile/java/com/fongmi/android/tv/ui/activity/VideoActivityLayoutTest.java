@@ -3287,7 +3287,7 @@ public class VideoActivityLayoutTest {
                 styleBody.contains("icon.setColorFilter(colors.secondary)"));
         assertTrue("focused direct detail external links must use the shared theme focus stroke",
                 styleBody.contains("boolean focused = row.hasFocus();")
-                        && styleBody.contains("background.setStroke(ResUtil.dp2px(focused ? FOCUS_STROKE_DP : CHIP_STROKE_DP), focused ? focusStroke() : colors.line);"));
+                        && styleBody.contains("background.setStroke(focused ? focusRingWidthPx() : ResUtil.dp2px(CHIP_STROKE_DP), focused ? focusStroke() : colors.line);"));
     }
 
     @Test
