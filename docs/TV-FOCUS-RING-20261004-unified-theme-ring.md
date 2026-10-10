@@ -493,3 +493,93 @@ Javadoc 里，豁免列表本身即契约。
 只改一个 dimen 取值与一个 drawable 的 `corners` 属性：把 `webhtv_focus_ring_width` 改回 `3dp`、
 `shape_vod_focused` 的 `android:radius` 改回 `8dp` 即回到 §11 的状态（本轮两个新测试会同时转红，
 正好是判据）。两条注释性 prose 与本文档属于记录，不需要回滚。
+
+## 13. 追加：详情页/播放页同类环圆角对齐 + 卡片集数名可读性（2026-10-10 第二轮）
+
+### 13.1 用户原始要求
+
+> 播放页，详情页估计都有类似问题请一起修复吧。再就是卡片下方的集数名称一栏字体颜色不对看不清，
+> 手机版是改成和剧名一个颜色的电视版你看怎么处理比较好
+
+### 13.2 根因（与 §12.2 同一几何规则，只是宿主不同）
+
+§12 只修了首页卡片的 `selector_vod`。同一个「环是 foreground、宿主表面自带圆角」的组合在详情页/
+播放页还有 5 处，全部仍是「声明值 = 宿主圆角」的旧写法，于是环外边界圆角比宿主大 w/2，
+宿主圆角露出环外：
+
+| 环 | 宿主 | 宿主圆角 | 旧声明 | 新声明 |
+| --- | --- | --- | --- | --- |
+| `selector_episode_card`（详情页选集卡） | `adapter_episode_card` CardView | 8dp | 8dp | **6dp** |
+| `selector_tmdb_media_focus`（剧照/相关视频） | `adapter_tmdb_video`/`photo` MaterialCardView | 8dp | 8dp | **6dp** |
+| `selector_tmdb_cast_focus`（演员卡） | `adapter_tmdb_cast` MaterialCardView | 12dp | 12dp | **9.5dp** |
+| `shape_episode_photo_focused`（剧照详情） | `dialog_episode_detail#stillCard` CardView | 8dp | 8dp | **6dp** |
+| `shape_video_focused`（播放页画面框） | `activity_video#video` FrameLayout（**直角**） | 0dp | 8dp | **0dp** |
+
+实测（Robolectric 栅格化真实宿主 + 真实 drawable，四档密度 hdpi/xhdpi/xxhdpi/xxxhdpi 的溢出像素）：
+
+| 声明值 | 8dp 宿主 | 12dp 宿主 | 直角宿主 |
+| --- | --- | --- | --- |
+| 旧值 8dp / 12dp | 26 / 34 / 61 / 123 | 4 / 0 / 0 / 0 → 10.5dp 时 9 | 4 / 11 / 20 / 30 |
+| **新值 6dp / 9.5dp / 0dp** | **0 / 2 / 0 / 2** | **0 / 0 / 0 / 0** | **0 / 0 / 0 / 0** |
+
+（8dp 宿主在 xhdpi/xxxhdpi 的 2px 是半径与描边取整的半像素平局，属既有容差口径；
+旧值同密度下是 34/123，相差一个数量级。）
+
+### 13.3 cache 管理弹窗按钮：不能再用 foreground 描边环
+
+`selector_cache_button_focus` 是 `MaterialButton` 的 foreground 环，声明 28dp。实测确认
+**几何上无法对齐**：M3 按钮圆角来自 `ShapeAppearance.M3.Comp.Button.Small.Container.Shape.Round`
+→ `ShapeAppearance.M3.Sys.Shape.Corner.Full` → `cornerSize = 50%`（52dp 高按钮 = 26dp 胶囊），
+而 foreground 环画在整个 view 上、按钮填充却被 4dp inset（实测填充 bbox y 12..143 / 156，
+环 bbox 0..155）——环的盒位与圆角都和按钮轮廓不同，任何固定 dp 都只能近似。
+
+因此改为 Material 自带的描边通道（`app:strokeColor` + `app:strokeWidth`，与 `dialog_about` /
+`item_following` 同一做法）：Material 用**同一个** `ShapeAppearanceModel` 同时画填充与描边，
+几何天然一致。环色按既有规则取「焦点态实际填充色的配对 on-色」：
+
+- tonal（secondaryContainer 填充）→ `@color/focus_ring_secondary`（浅色表 13.18:1 / 夜间 7.24:1）
+- text/outlined（无容器填充）→ `@color/focus_ring_primary`（浅色表对 secondaryContainer 4.91:1）
+
+`selector_cache_button_focus.xml` 已删除；`CacheManagementDialog` 的两个 Java 工厂方法
+（`moduleButton`/`limitButton`）改用 `applyFocusRing(...)` 走 `setStrokeColor`/`setStrokeWidth`。
+两个 flavor 的 `dialog_cache_management.xml` 共 18 处 `android:foreground` 改为 stroke 属性。
+
+### 13.4 集数名可读性
+
+`app/src/leanback/res/layout/adapter_vod.xml` 的 `@id/remark`（卡片下方「第01集. 海边散步」那一行）
+此前用 `?attr/colorOnSurfaceVariant`（浅色表 #44474F），画在 `shape_vod_name` 的深色半透明条带上：
+
+| 行 | 取值 | 实测对比度 |
+| --- | --- | --- |
+| `@id/name`（剧名，未变） | `?attr/webhtvColorOnWallpaper` = #FFFFFF | 6.89:1 |
+| `@id/remark`（集数名，修复前） | `?attr/colorOnSurfaceVariant` = #44474F | **1.35:1** ← 用户报告的「看不清」 |
+| `@id/remark`（修复后） | `?attr/webhtvColorOnWallpaper` = #FFFFFF | **7.26:1** |
+
+手机版同一行本来就是 `?attr/webhtvColorOnWallpaper`，TV 对齐该取值后两版语义一致。
+`adapter_vod_rect` / `adapter_search` 的 remark 本来就是这个取值，无差异。
+
+### 13.5 本轮验证证据
+
+| 检查 | 结果 |
+| --- | --- |
+| `TvFocusRingContractTest` | 14/14（新增 `foregroundRingsDeclareTheirHostCornerMinusHalfTheRingWidth`、`leanbackCardEpisodeLineUsesTheSameReadableColourAsItsTitle`） |
+| `TvAppSurfaceFocusRingDeviceTest` | 9/9（新增 `realDetailAndPlayerHostsContainTheirFocusRingCorner`：inflate 真实宿主 + 真实环，四档密度逐像素判定） |
+| `:app:testLeanbackArm64_v8aDebugUnitTest` | 4161 tests / 0 failures |
+| `:app:testMobileArm64_v8aDebugUnitTest` | 4980 tests / 0 failures |
+| `scripts/check_ui_tokens.sh` | `violations=1`（= 基线）、`hex_drawables=0`、`contrast failures=0` |
+| `NativeEnhancedPlaybackStyleFocusTest` | 同步更新：选集卡/演员卡不再要求写死宿主圆角，改为要求「小于宿主圆角且走实测安全值」 |
+
+实机复核（dev1，覆盖安装同签名 Debug 包）：
+
+| 页面 | 修复前 | 修复后 |
+| --- | --- | --- |
+| 首页卡片集数名 | 近白像素 0、近 #44474F 像素 12–62（深灰字） | 全白，实测对比度 **7.26:1**（与剧名同色） |
+| 详情页选集卡圆角 | 环外边界外有宿主像素（月牙） | 「无法用 环色↔背景 混合解释」的环外像素 = **0** |
+| 播放页画面框 | 白环 8dp 圆角切进黑底直角 | 白环收成方角（0dp），黑角不再被切 |
+
+### 13.6 回滚
+
+- 环圆角：把 5 个 drawable 的 `android:radius` 改回宿主圆角（8dp/12dp/8dp）即回到旧状态。
+- cache 按钮：恢复 `selector_cache_button_focus.xml` 与两个布局的 `android:foreground`、
+  `CacheManagementDialog` 的 `setForeground`。
+- 集数名：把 `adapter_vod.xml` 的 remark 改回 `?attr/colorOnSurfaceVariant`。

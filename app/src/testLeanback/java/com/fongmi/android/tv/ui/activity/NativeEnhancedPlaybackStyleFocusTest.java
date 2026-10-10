@@ -58,27 +58,32 @@ public class NativeEnhancedPlaybackStyleFocusTest {
     @Test
     public void everySelectableSurfaceSharesOneFocusSpec() throws Exception {
         // 方形芯片与选集卡统一 8dp 圆角。
+        // 注意：选集卡（EPISODE_CARD_SELECTOR）是卡片的 foreground，它的声明圆角必须取
+        // 宿主圆角 − w/2（见 TvFocusRingContractTest.foregroundRingsDeclareTheirHostCorner
+        // MinusHalfTheRingWidth 与 docs §12.2），所以这里不再要求它写死 8dp。
         for (String selector : new String[]{CHIP_SELECTOR, EPISODE_CARD_SELECTOR}) {
             String body = values(read(selector));
             assertTrue(selector + " 的焦点态必须是 3dp 焦点语义属性",
                     body.contains("android:width=\"3dp\" android:color=\"?attr/tvFocusRing\""));
-            assertTrue(selector + " 的圆角必须统一为 8dp", body.contains("<corners android:radius=\"8dp\" />"));
             assertFalse(selector + " 不允许再出现白色焦点环", body.contains("android:color=\"@color/white\"")
                     || body.contains("android:color=\"#FFFFFF\""));
             assertFalse(selector + " 的值不允许再出现硬编码焦点色，必须走主题属性",
                     body.contains("#FFD166") || body.contains("#FFE16A") || body.contains("#0077FF"));
         }
+        assertTrue(CHIP_SELECTOR + " 的圆角必须统一为 8dp",
+                values(read(CHIP_SELECTOR)).contains("<corners android:radius=\"8dp\" />"));
 
-        // 演员卡是圆角卡片，焦点环必须同半径，否则描边会内缩或外溢。
-        // 卡片圆角走 dev3 的共享尺寸 token，焦点环必须与卡片使用同一个 token 才能保证永远一致。
+        // 演员卡是圆角卡片，焦点环必须与宿主卡片圆角对齐（声明值 = 宿主圆角 − w/2，
+        // 而不是直接写宿主圆角，否则环外边界会大 w/2、卡片圆角露出环外）。
         String cast = values(read(CAST_FOCUS_SELECTOR));
         assertTrue("演员卡焦点态必须是 3dp 焦点语义属性",
                 cast.contains("android:width=\"3dp\" android:color=\"?attr/tvFocusRing\""));
         assertTrue("演员卡当前态必须是 2dp 当前语义属性",
                 cast.contains("android:width=\"2dp\" android:color=\"?attr/tvCurrentRing\""));
-        assertTrue("演员卡焦点环半径必须与其卡片圆角使用同一个尺寸 token",
-                cast.contains("<corners android:radius=\"@dimen/webhtv_card_radius_large\" />")
-                        && read("app/src/main/res/layout/adapter_tmdb_cast.xml").contains("app:cardCornerRadius=\"@dimen/webhtv_card_radius_large\""));
+        assertTrue("演员卡宿主卡片圆角仍必须走共享尺寸 token",
+                read("app/src/main/res/layout/adapter_tmdb_cast.xml").contains("app:cardCornerRadius=\"@dimen/webhtv_card_radius_large\""));
+        assertTrue("演员卡焦点环声明圆角必须小于宿主圆角（实测 9.5dp 在四档密度下 0 溢出）",
+                cast.contains("<corners android:radius=\"9.5dp\" />"));
         assertFalse("演员卡不允许再出现白色焦点环", cast.contains("android:color=\"@color/white\""));
     }
 

@@ -338,6 +338,114 @@ public class TvAppSurfaceFocusRingDeviceTest {
         }
     }
 
+    // ------------------------------------------------------------ R4b 真实宿主（详情页/播放页）
+
+    /**
+     * 把「环外边界必须包住宿主真实轮廓」这条要求，直接跑在**真实布局**上。
+     *
+     * <p>与上面 R4 的区别：R4 用代码搭一个 8dp 圆角矩形当卡片表面；这里直接 inflate 生产布局
+     * （adapter_episode_card / adapter_tmdb_video / adapter_tmdb_photo / adapter_tmdb_cast /
+     * dialog_episode_detail 的 stillCard），取它们的真实 background 作为「宿主表面」，再把真实环
+     * 栅格化后逐像素判定。宿主圆角、内缩、自带描边全部是生产值，没有任何测试侧假设。
+     *
+     * <p>宿主与环的对应关系（详情页/播放页，2026-10-10 新增）：
+     * <ul>
+     *   <li>{@code adapter_episode_card} ↔ {@code selector_episode_card}（8dp 宿主）</li>
+     *   <li>{@code adapter_tmdb_video} / {@code adapter_tmdb_photo} ↔ {@code selector_tmdb_media_focus}（8dp）</li>
+     *   <li>{@code adapter_tmdb_cast} ↔ {@code selector_tmdb_cast_focus}（12dp）</li>
+     *   <li>{@code dialog_episode_detail#stillCard} ↔ {@code selector_episode_photo}（8dp）</li>
+     *   <li>播放页画面框 {@code @id/video} 是直角 FrameLayout ↔ {@code selector_video}（0dp）</li>
+     * </ul>
+     *
+     * <p>容差与 R4 同口径：主档密度严格 0，其余档位允许每角 2px 的亚像素平局。
+     */
+    @Test
+    public void realDetailAndPlayerHostsContainTheirFocusRingCorner() {
+        for (String density : new String[]{"hdpi", "xhdpi", "xxhdpi", "xxxhdpi"}) {
+            RuntimeEnvironment.setQualifiers(density);
+            Context context = themedContext();
+            float d = context.getResources().getDisplayMetrics().density;
+
+            // 1) 详情页选集卡：CardView 8dp + selector_episode_card
+            checkHost(context, "adapter_episode_card/selector_episode_card", density,
+                    R.layout.adapter_episode_card, 0, R.drawable.selector_episode_card,
+                    (int) (280 * d), (int) (160 * d));
+            // 2) 详情页相关视频 / 剧照：MaterialCardView 8dp + selector_tmdb_media_focus
+            checkHost(context, "adapter_tmdb_video/selector_tmdb_media_focus", density,
+                    R.layout.adapter_tmdb_video, 0, R.drawable.selector_tmdb_media_focus,
+                    (int) (276 * d), (int) (156 * d));
+            checkHost(context, "adapter_tmdb_photo/selector_tmdb_media_focus", density,
+                    R.layout.adapter_tmdb_photo, 0, R.drawable.selector_tmdb_media_focus,
+                    (int) (220 * d), (int) (124 * d));
+            // 3) 详情页演员卡：MaterialCardView 12dp + selector_tmdb_cast_focus
+            checkHost(context, "adapter_tmdb_cast/selector_tmdb_cast_focus", density,
+                    R.layout.adapter_tmdb_cast, 0, R.drawable.selector_tmdb_cast_focus,
+                    (int) (90 * d), (int) (150 * d));
+            // 4) 剧照详情卡：CardView 8dp + selector_episode_photo
+            checkHost(context, "dialog_episode_detail#stillCard/selector_episode_photo", density,
+                    R.layout.dialog_episode_detail, R.id.stillCard, R.drawable.selector_episode_photo,
+                    (int) (400 * d), (int) (225 * d));
+            // 5) 播放页画面框：直角 FrameLayout + selector_video（声明 0dp）
+            checkHost(context, "activity_video#video/selector_video", density,
+                    R.layout.activity_video, R.id.video, R.drawable.selector_video,
+                    (int) (400 * d), (int) (225 * d));
+        }
+    }
+
+    /**
+     * inflate 真实宿主（可指定内部 id），用它的 background 当表面，与真实环逐像素比。
+     * 表面为 null 时（直角宿主如播放页画面框）改用「整块不透明矩形」当表面，
+     * 这样仍能抓到「环把直角宿主包出圆角」的错位。
+     */
+    private static void checkHost(Context context, String label, String density, int layoutRes, int innerId,
+                                  int ringRes, int w, int h) {
+        android.view.View root = android.view.LayoutInflater.from(context).inflate(layoutRes, null, false);
+        android.view.View host = innerId == 0 ? root : root.findViewById(innerId);
+        assertTrue(label + " 必须能在真实布局里找到宿主", host != null);
+        host.measure(android.view.View.MeasureSpec.makeMeasureSpec(w, android.view.View.MeasureSpec.EXACTLY),
+                android.view.View.MeasureSpec.makeMeasureSpec(h, android.view.View.MeasureSpec.EXACTLY));
+        host.layout(0, 0, w, h);
+
+        Drawable ring = focusedDrawable(context, ringRes);
+        Bitmap surfaceBitmap = hostSurface(host, w, h);
+        int outside = cardPixelsOutsideRing(rasterize(ring, w, h), surfaceBitmap, w, h);
+
+        String where = label + "（限定符 " + density + "，实际密度 "
+                + context.getResources().getDisplayMetrics().density + "）";
+        if (TV_PRIMARY_DENSITY.equals(density)) {
+            assertEquals("宿主表面不允许有任何像素落在焦点环外边界之外 " + where
+                    + "——环声明圆角必须取 宿主圆角 − 环宽/2", 0, outside);
+        } else {
+            assertTrue(where + " 的溢出 " + outside + "px 必须落在亚像素上限 "
+                    + SUBPIXEL_LEAK_TOLERANCE_PX + "px 内", outside <= SUBPIXEL_LEAK_TOLERANCE_PX);
+        }
+    }
+
+    /**
+     * 取宿主的**真实**可见轮廓：{@code MaterialCardView} 不暴露 {@code getBackground()}
+     * （它用内部 ShapeThemingDrawable），必须从 {@code getShapeAppearanceModel()} 重建；
+     * 其它视图直接用 background；直角宿主（如播放页画面框）退化为整块矩形。
+     */
+    private static Bitmap hostSurface(android.view.View host, int w, int h) {
+        Drawable background = host.getBackground();
+        if (background != null) return rasterize(background, w, h);
+        if (host instanceof com.google.android.material.card.MaterialCardView card) {
+            com.google.android.material.shape.MaterialShapeDrawable shape =
+                    new com.google.android.material.shape.MaterialShapeDrawable(card.getShapeAppearanceModel());
+            shape.setTint(0xFFF3E7D9);
+            return rasterize(shape, w, h);
+        }
+        return solidRect(w, h);
+    }
+
+    /** 直角宿主的表面：整块不透明矩形。 */
+    private static Bitmap solidRect(int w, int h) {
+        Bitmap bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        canvas.drawColor(0xFFF3E7D9);
+        return bitmap;
+    }
+
     /**
      * 变异检验：把用户报告时的旧取值（声明 8dp + 3dp 环宽）搭回来，上面的度量必须能抓到卡片
      * 圆角溢出，否则 {@code cardRingOuterBoundaryContainsEveryCardSurfacePixel} 就是空断言。
@@ -377,9 +485,13 @@ public class TvAppSurfaceFocusRingDeviceTest {
     }
 
     private static Bitmap rasterize(Drawable drawable, int size) {
-        Bitmap bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        return rasterize(drawable, size, size);
+    }
+
+    private static Bitmap rasterize(Drawable drawable, int width, int height) {
+        Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
-        drawable.setBounds(0, 0, size, size);
+        drawable.setBounds(0, 0, width, height);
         drawable.draw(canvas);
         return bitmap;
     }
@@ -389,7 +501,12 @@ public class TvAppSurfaceFocusRingDeviceTest {
      * 扩散得到的就是环外侧的区域（环内部被不透明环带封住，扩散不进去）。
      */
     private static int cardPixelsOutsideRing(Bitmap ring, Bitmap card) {
-        int total = CORNER_SIZE * CORNER_SIZE;
+        return cardPixelsOutsideRing(ring, card, CORNER_SIZE, CORNER_SIZE);
+    }
+
+    /** 同上，但接受任意尺寸（详情页/播放页的真实宿主不是正方形）。 */
+    private static int cardPixelsOutsideRing(Bitmap ring, Bitmap card, int width, int height) {
+        int total = width * height;
         boolean[] cardPixel = new boolean[total];
         boolean[] ringPixel = new boolean[total];
         boolean[] outside = new boolean[total];
@@ -397,12 +514,12 @@ public class TvAppSurfaceFocusRingDeviceTest {
         int head = 0;
         int tail = 0;
 
-        for (int y = 0; y < CORNER_SIZE; y++) {
-            for (int x = 0; x < CORNER_SIZE; x++) {
-                int at = y * CORNER_SIZE + x;
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int at = y * width + x;
                 ringPixel[at] = alpha(ring, x, y) >= OPAQUE;
                 cardPixel[at] = alpha(card, x, y) >= OPAQUE;
-                boolean border = x == 0 || y == 0 || x == CORNER_SIZE - 1 || y == CORNER_SIZE - 1;
+                boolean border = x == 0 || y == 0 || x == width - 1 || y == height - 1;
                 if (border && !ringPixel[at] && !outside[at]) {
                     outside[at] = true;
                     queue[tail++] = at;
@@ -412,13 +529,13 @@ public class TvAppSurfaceFocusRingDeviceTest {
 
         while (head < tail) {
             int at = queue[head++];
-            int x = at % CORNER_SIZE;
-            int y = at / CORNER_SIZE;
+            int x = at % width;
+            int y = at / width;
             for (int[] step : new int[][]{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}) {
                 int nx = x + step[0];
                 int ny = y + step[1];
-                if (nx < 0 || ny < 0 || nx >= CORNER_SIZE || ny >= CORNER_SIZE) continue;
-                int next = ny * CORNER_SIZE + nx;
+                if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+                int next = ny * width + nx;
                 if (ringPixel[next] || outside[next]) continue;
                 outside[next] = true;
                 queue[tail++] = next;

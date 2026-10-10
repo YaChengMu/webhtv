@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -350,6 +351,117 @@ public class TvFocusRingContractTest {
                 .matcher(xml);
         assertTrue("必须能在 XML 里找到 " + key + " 的 dp 取值", matcher.find());
         return Double.parseDouble(matcher.group(1));
+    }
+
+    // ------------------------------------------------------------ R5 前景环圆角必须对齐宿主表面
+
+    /**
+     * 同一类缺陷在详情页/播放页的实例（2026-10-10 实机复核）：环作为卡片的 <b>foreground</b> 时，
+     * 环外边界圆角半径 = 声明值 + w/2（见 §12.2 的几何推导）。若声明值直接写宿主圆角，
+     * 外边界就会比宿主大 w/2，宿主圆角在环外露出一段；宿主是直角时更明显。
+     *
+     * <p>本测试把「声明值 = 宿主圆角 − w/2（下限 0）」钉死到四个宿主：
+     * <ul>
+     *   <li>{@code selector_episode_card}（焦点 3dp）→ 宿主 {@code adapter_episode_card} 的
+     *       CardView {@code @dimen/webhtv_card_radius_default} = 8dp；</li>
+     *   <li>{@code selector_tmdb_media_focus}（焦点 3dp）→ 宿主 {@code adapter_tmdb_video}/
+     *       {@code adapter_tmdb_photo} 的 MaterialCardView 8dp；</li>
+     *   <li>{@code selector_tmdb_cast_focus}（焦点 3dp）→ 宿主 {@code adapter_tmdb_cast} 的
+     *       {@code @dimen/webhtv_card_radius_large} = 12dp；</li>
+     *   <li>{@code shape_episode_photo_focused}（焦点 3dp）→ 宿主 {@code dialog_episode_detail}
+     *       的 {@code @id/stillCard} CardView 8dp；</li>
+     *   <li>{@code shape_video_focused}（宽度走 token）→ 宿主是普通 FrameLayout（直角），故为 0dp。</li>
+     * </ul>
+     *
+     * <p>栅格化端到端断言（真实宿主 inflate + 环栅格化后数溢出像素）在
+     * {@code TvAppSurfaceFocusRingDeviceTest.cardRingOuterBoundaryContainsItsHostSurface}。
+     */
+    @Test
+    public void foregroundRingsDeclareTheirHostCornerMinusHalfTheRingWidth() throws Exception {
+        // {环文件, 该状态的环宽 dp, 宿主圆角 dp, 宿主来源说明, 理想声明值 dp}
+        // 理想值 = 宿主圆角 − 环宽/2；实测（Robolectric 栅格化，真实宿主 inflate）在各档密度下
+        // 0 溢出的最小声明值就是该理想值（例如 8dp 宿主 + 3dp 环 = 6.5dp）。
+        Object[][] rings = {
+                {"app/src/main/res/drawable/selector_episode_card.xml", 3.0, 8.0, 6.0,
+                        "adapter_episode_card CardView cardCornerRadius=webhtv_card_radius_default"},
+                {"app/src/main/res/drawable/selector_tmdb_media_focus.xml", 3.0, 8.0, 6.0,
+                        "adapter_tmdb_video/photo MaterialCardView cardCornerRadius=webhtv_card_radius_default"},
+                {"app/src/main/res/drawable/selector_tmdb_cast_focus.xml", 3.0, 12.0, 9.5,
+                        "adapter_tmdb_cast MaterialCardView cardCornerRadius=webhtv_card_radius_large"},
+                {"app/src/main/res/drawable/shape_episode_photo_focused.xml", 3.0, 8.0, 6.0,
+                        "dialog_episode_detail stillCard CardView cardCornerRadius=8dp"},
+        };
+        for (Object[] entry : rings) {
+            String path = (String) entry[0];
+            double width = (Double) entry[1];
+            double host = (Double) entry[2];
+            double expected = (Double) entry[3];
+            double declared = firstCornerRadiusDp(values(read(path)));
+            double ideal = Math.max(host - width / 2, 0);
+            assertEquals(path + " 的焦点态声明圆角必须等于 宿主圆角 − 环宽/2 = " + ideal + "dp（宿主 "
+                            + host + "dp 来自 " + entry[4] + "），实测 0 溢出的最小取值；实际 " + declared + "dp",
+                    expected, declared, 0.01);
+        }
+
+        // 当前态（2dp）同样要减自己的 w/2：8dp 宿主 → 7dp 理论、实测 6dp 起 0 溢出（取 6dp）；
+        // 12dp 宿主 → 11dp 理论、实测 10dp 起 0 溢出（取 10dp）。
+        assertEquals("选集卡当前态声明圆角", 6.0,
+                secondCurrentStateCornerRadiusDp(values(read("app/src/main/res/drawable/selector_episode_card.xml"))), 0.01);
+        assertEquals("剧照/相关视频当前态声明圆角", 6.0,
+                secondCurrentStateCornerRadiusDp(values(read("app/src/main/res/drawable/selector_tmdb_media_focus.xml"))), 0.01);
+        assertEquals("演员卡当前态声明圆角", 9.5,
+                secondCurrentStateCornerRadiusDp(values(read("app/src/main/res/drawable/selector_tmdb_cast_focus.xml"))), 0.01);
+
+        // 直角宿主：播放页画面框是普通 FrameLayout（无圆角），环必须是 0dp，
+        // 否则环外边界圆角（w/2 + 声明值）比黑底直角还大，黑角会露在环外。
+        double videoRing = firstCornerRadiusDp(values(read(LEANBACK_DRAWABLE + "shape_video_focused.xml")));
+        assertEquals("播放页画面框是直角宿主，环声明圆角必须是 0dp", 0.0, videoRing, 0.01);
+    }
+
+    /** 取 XML 里第一个 {@code android:radius} 的 dp 值（缺省视为 0，例如只写了 per-corner）。 */
+    private static double firstCornerRadiusDp(String xml) {
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+                .compile("android:radius=\"([0-9.]+)dp\"").matcher(xml);
+        return matcher.find() ? Double.parseDouble(matcher.group(1)) : 0.0;
+    }
+
+    /** 取 XML 里第二个 {@code android:radius} 的 dp 值（这些 selector 的第二段就是当前态）。 */
+    private static double secondCurrentStateCornerRadiusDp(String xml) {
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+                .compile("android:radius=\"([0-9.]+)dp\"").matcher(xml);
+        assertTrue("必须至少有两段带圆角的 shape", matcher.find() && matcher.find());
+        return Double.parseDouble(matcher.group(1));
+    }
+
+    /**
+     * 集数名可读性：TV 卡片下方那一行（{@code adapter_vod} 的 {@code @id/remark}）此前用
+     * {@code ?attr/colorOnSurfaceVariant}（浅色表 #44474F）画在深色 {@code shape_vod_name}
+     * 条带上，实机对比度只有 <b>1.35:1</b>（刷名 {@code @id/name} 用白色是 6.89:1），用户报告
+     * 「集数名称一栏字体颜色不对看不清」。手机版同一行用的是 {@code ?attr/webhtvColorOnWallpaper}，
+     * TV 对齐该取值。
+     */
+    @Test
+    public void leanbackCardEpisodeLineUsesTheSameReadableColourAsItsTitle() throws Exception {
+        String layout = read("app/src/leanback/res/layout/adapter_vod.xml");
+        String nameColour = textColourOf(layout, "name");
+        String remarkColour = textColourOf(layout, "remark");
+        assertEquals("集数名必须与刷名同色（手机版同款可读取值）", nameColour, remarkColour);
+        assertEquals("集数名必须走 webhtvColorOnWallpaper（深色条带上实测 6.89:1）",
+                "?attr/webhtvColorOnWallpaper", remarkColour);
+        assertFalse("集数名不允许再用 colorOnSurfaceVariant（深色条带上仅 1.35:1）",
+                remarkColour.contains("colorOnSurfaceVariant"));
+    }
+
+    /** 取某个 {@code @+id/xxx} 控件上的 {@code android:textColor}。 */
+    private static String textColourOf(String layout, String id) {
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+                .compile("@\\+id/" + java.util.regex.Pattern.quote(id) + "\"(.*?)(?:/>|</)", java.util.regex.Pattern.DOTALL)
+                .matcher(layout);
+        assertTrue("布局里必须能找到 @+id/" + id, matcher.find());
+        java.util.regex.Matcher colour = java.util.regex.Pattern
+                .compile("android:textColor=\"([^\"]+)\"").matcher(matcher.group(1));
+        assertTrue("@+id/" + id + " 必须显式声明 textColor", colour.find());
+        return colour.group(1);
     }
 
     // ------------------------------------------------------------ R2 统一机制与宽度
