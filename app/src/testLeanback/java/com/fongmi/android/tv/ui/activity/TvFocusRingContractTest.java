@@ -197,15 +197,90 @@ public class TvFocusRingContractTest {
                 "shape_video_focused.xml",
                 "shape_subtitle_focused.xml",
                 "shape_subtitle_pressed.xml",
+                "selector_control_sheet_button.xml",
+                "selector_episode_dialog_item.xml",
+                "selector_episode_dialog_page.xml",
+                "selector_danmaku_result_item.xml",
+                "selector_danmaku_search_action.xml",
+                "shape_video_item_focused.xml",
         };
         for (String name : paletteIndependent) {
             String path = LEANBACK_DRAWABLE + name;
             String body = values(read(path));
             assertTrue(path + " 的焦点环必须引用唯一宽度 token " + WIDTH,
                     body.contains("android:width=\"" + WIDTH + "\""));
-            assertFalse(path + " 不允许再写死描边宽度",
-                    body.matches("(?s).*android:width=\"[0-9.]+dp\".*"));
+            // 只约束**焦点态**的描边宽度：这些文件里还带有 1dp 的常态轮廓，
+            // 那是「未聚焦轮廓」而不是焦点环，套用 3dp 反而会模糊常态与焦点的区分。
+            java.util.List<String> widths = focusStateStrokeWidths(body, name);
+            assertFalse(path + " 的焦点态描边不允许写死宽度，实际为 " + widths,
+                    widths.stream().anyMatch(w -> !WIDTH.equals(w)));
         }
+    }
+
+    /** 抽出 {@code body} 里焦点态描边的宽度（含单 shape 的 focused 文件）。 */
+    private static java.util.List<String> focusStateStrokeWidths(String body, String name) {
+        java.util.List<String> widths = new java.util.ArrayList<>();
+        java.util.regex.Matcher item = java.util.regex.Pattern
+                .compile("<item\\b[^>]*state_focused=\"true\"[^>]*>(.*?)</item>", java.util.regex.Pattern.DOTALL)
+                .matcher(body);
+        while (item.find()) {
+            java.util.regex.Matcher stroke = java.util.regex.Pattern
+                    .compile("<stroke\\b[^>]*android:width=\"([^\"]+)\"")
+                    .matcher(item.group(1));
+            while (stroke.find()) widths.add(stroke.group(1));
+        }
+        if (!body.contains("<item") && name.contains("focused")) {
+            java.util.regex.Matcher stroke = java.util.regex.Pattern
+                    .compile("<stroke\\b[^>]*android:width=\"([^\"]+)\"")
+                    .matcher(body);
+            while (stroke.find()) widths.add(stroke.group(1));
+        }
+        return widths;
+    }
+
+    /**
+     * 全库不变量：leanback 里**任何**焦点态描边都不得写死宽度，必须引用唯一 token。
+     *
+     * <p>上一条测试是白名单式断言（只检查名单内的文件），新增文件不会被覆盖。本测试反过来
+     * 扫描整个 {@code leanback/res/drawable}，所以以后新增一个焦点环、或把旧的 1.5dp/2dp
+     * 写回来，都会直接转红——这正是用户报告「边框粗细也貌似不一样」需要被永久挡住的一类改动。
+     *
+     * <p>仅两个文件豁免，且各有明确理由（豁免列表本身就是契约）：
+     * <ul>
+     *   <li>{@code selector_video_item.xml} —— 它是电视版统一焦点环规范的**样板文件**
+     *       （其他文件都在注释里指向它），其字面量 {@code 3dp} 与 token 取值完全相同，
+     *       且 {@code NativeEnhancedPlaybackStyleFocusTest} 把它当作规范基准逐字断言；
+     *       改它只会引入无视觉收益的跨任务测试改动。</li>
+     *   <li>{@code shape_audio_action_icon_focused.xml} —— 它不是容器焦点环，而是播放页音频
+     *       按钮上带 {@code inset=3dp} 的**图标内描边环**（40dp 图标 / 17dp 圆角），
+     *       角色与尺寸均不同，套 3dp 会把图标糊成一团。</li>
+     * </ul>
+     */
+    @Test
+    public void noLeanbackFocusRingHardcodesItsWidth() throws Exception {
+        java.util.Set<String> exempt = java.util.Set.of(
+                "selector_video_item.xml",
+                "shape_audio_action_icon_focused.xml");
+        java.nio.file.Path dir = java.nio.file.Path.of("app/src/leanback/res/drawable");
+        if (!java.nio.file.Files.isDirectory(dir)) dir = java.nio.file.Path.of("../app/src/leanback/res/drawable");
+        assertTrue("leanback drawable 目录必须存在", java.nio.file.Files.isDirectory(dir));
+
+        java.util.List<String> violations = new java.util.ArrayList<>();
+        int checked = 0;
+        try (java.util.stream.Stream<java.nio.file.Path> paths = java.nio.file.Files.list(dir)) {
+            for (java.nio.file.Path path : paths.sorted().toList()) {
+                String name = path.getFileName().toString();
+                if (!name.endsWith(".xml") || exempt.contains(name)) continue;
+                String body = values(read(path.toString().replace('\\', '/')));
+                for (String width : focusStateStrokeWidths(body, name)) {
+                    checked++;
+                    if (!WIDTH.equals(width)) violations.add(name + " -> " + width);
+                }
+            }
+        }
+        assertTrue("扫描必须真的读到焦点环，否则本测试是空断言", checked >= 15);
+        assertTrue("电视版焦点环宽度只允许有一个来源 " + WIDTH + "，以下仍写死：" + violations,
+                violations.isEmpty());
     }
 
     /**

@@ -1,4 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    电视版播放器控制面板按钮（dialog_control 的 ControlSheetButton 样式）的统一焦点环。
+
+    环宽唯一来源：@dimen/webhtv_focus_ring_width（3dp）。此前焦点/按下/当前三态写死 2dp，
+    与电视端其余焦点环不一致，是用户报告「边框粗细也貌似不一样」的同一族缺陷。
+    常态描边保持 1dp：它表达的是「未聚焦的轮廓」，不属于焦点环，与
+    selector_video_item 的 1dp tvNormalStroke 分档一致。
+
+    环色保持与调色板无关的白色：本控件叠在播放页的固定深色玻璃面板
+    （shape_dialog_control_glass_panel）上，按「宿主机明暗固定 → 环色与调色板无关」
+    的规则取白；这也是仓库既有契约里明确保留的播放器层。
+-->
 <ripple xmlns:android="http://schemas.android.com/apk/res/android"
     android:color="#33FFFFFF">
     <item>
@@ -8,7 +20,7 @@
                     <corners android:radius="6dp" />
                     <solid android:color="#5CFFFFFF" />
                     <stroke
-                        android:width="2dp"
+                        android:width="@dimen/webhtv_focus_ring_width"
                         android:color="#D9FFFFFF" />
                 </shape>
             </item>
@@ -17,7 +29,7 @@
                     <corners android:radius="6dp" />
                     <solid android:color="#4DFFFFFF" />
                     <stroke
-                        android:width="2dp"
+                        android:width="@dimen/webhtv_focus_ring_width"
                         android:color="#BFFFFFFF" />
                 </shape>
             </item>
@@ -26,7 +38,7 @@
                     <corners android:radius="6dp" />
                     <solid android:color="#5CFFFFFF" />
                     <stroke
-                        android:width="2dp"
+                        android:width="@dimen/webhtv_focus_ring_width"
                         android:color="#BFFFFFFF" />
                 </shape>
             </item>

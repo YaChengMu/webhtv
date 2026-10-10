@@ -650,6 +650,19 @@ Resolver 必须执行，静态检查必须验证：
 固化分层清单，`TvAppSurfaceFocusRingDeviceTest` 用真实栅格化逐像素量厚度与颜色
 （含 day/night 跟随与变异检验）。
 
+宽度收口是**全库不变量**（2026-10-10 补充）：`TvFocusRingContractTest.noLeanbackFocusRingHardcodesItsWidth`
+扫描整个 `leanback/res/drawable`，断言**每一个**焦点态描边都引用
+`@dimen/webhtv_focus_ring_width`。只有两个文件豁免，豁免理由即契约：
+`selector_video_item.xml`（本规范的样板文件，字面量 `3dp` 与 token 取值相同，
+且被 `NativeEnhancedPlaybackStyleFocusTest` 当基准逐字断言）与
+`shape_audio_action_icon_focused.xml`（播放页音频按钮的 `inset=3dp` **图标内描边环**，
+40dp 图标 / 17dp 圆角，套 3dp 会把图标糊成一团）。
+
+同一轮还修掉了选集弹窗（固定深色面板 `#DD111820`）的一处「焦点不可见」缺陷：
+原环色取自填充色的近似色，与自身填充只有 `1.47:1` / `1.32:1`，
+两个 selected 态更是环与填充同色 = **`1.00:1`**；改白后为 `3.12:1` / `3.17:1`，
+达到 §5.3 的 3:1 门槛，并与所有其它固定深色宿主的白环规则一致。
+
 ### 9.2 输入框
 
 - 统一 `Widget.Material3.TextInputLayout.OutlinedBox` 或迁移后的 `Widget.WebHTV.Input.Outlined`。

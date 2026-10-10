@@ -314,3 +314,76 @@ D-pad 逐项截图复核。同一批 drawable 的上一轮（§7.1）已在同�
 
 全部为资源取值替换与测试新增，无 SQL、无协议、无持久化格式变更。
 回滚锚点：`git revert <本任务提交>` 或 `git reset --hard <提交前 HEAD>`。
+
+---
+
+## 11. 追加：剩余焦点环的宽度收口与选集弹窗环色修正（2026-10-10）
+
+§9 统一了 21 个文件后，全库扫描仍发现 8 个 leanback 焦点态描边没有引用唯一宽度 token。
+本节把它们收口，并顺手修掉扫描时暴露的一处「焦点完全看不见」缺陷。
+
+### 11.1 剩余 8 个文件的分类与处置
+
+| 文件 | 原宽度 | 现状/处置 | 理由 |
+| --- | --- | --- | --- |
+| `selector_control_sheet_button.xml` | `2dp`（焦点/按下/当前三态） | → token | 播放器控制面板按钮；宿主是固定深色玻璃面板，环色保持白 |
+| `selector_episode_dialog_item.xml` | `2dp` | → token + 环色改白 | 选集弹窗剧集行；同时修掉 §11.2 的缺陷 |
+| `selector_episode_dialog_page.xml` | `3dp`（字面量） | → token + 环色改白 | 选集弹窗分页条；值虽相同但不是唯一来源 |
+| `selector_danmaku_result_item.xml` | `2dp` | → token | 无消费者的旧文件，避免以后接回时带回旧规范 |
+| `selector_danmaku_search_action.xml` | `2dp` | → token | 同上 |
+| `shape_video_item_focused.xml` | `1.5dp` | → token | 无消费者的旧文件（已被 `selector_video_item` 取代） |
+| `selector_video_item.xml` | `3dp`（字面量） | **保留** | 它是电视版焦点环规范的**样板文件**，其他文件注释都指向它；字面量与 token 取值完全相同；`NativeEnhancedPlaybackStyleFocusTest` 把它当规范基准逐字断言。改它只会带来零视觉收益的跨任务测试改动 |
+| `shape_audio_action_icon_focused.xml` | `1dp` | **保留** | 它不是容器焦点环，而是播放页音频按钮上带 `inset=3dp` 的**图标内描边环**（40dp 图标 / 17dp 圆角），角色与尺寸均不同，套 3dp 会把图标糊成一团 |
+
+### 11.2 顺带修掉的缺陷：选集弹窗焦点不可见
+
+统一时逐对计算对比度，发现选集弹窗（`dialog_episode` / `adapter_episode_dialog` /
+`adapter_episode_page`，宿主面板 `shape_episode_dialog_panel` 为固定深色 `#DD111820`）
+的环色取自填充色的近似色，**环与自身填充几乎同色**：
+
+| 状态 | 填充 | 原环色 | 原对比度 | 改白后 |
+| --- | --- | --- | --- | --- |
+| `episode_dialog_item` focused | `#2196F3` | `#1976D2` | **1.47:1** | **3.12:1** |
+| `episode_dialog_item` selected | `#CC2AA46B` | `#2AA46B` | **1.00:1**（完全不可见） | **3.17:1** |
+| `episode_dialog_page` focused | `#552196F3` | `#0077FF` | **1.32:1** | **3.12:1** |
+| `episode_dialog_page` selected | `#332196F3` | `#2196F3` | **1.00:1**（完全不可见） | **3.12:1** |
+
+环外侧贴 `#111820` 面板另有 17.87:1。改白后四项均达到 WCAG 2.2 SC 1.4.11 非文本
+对比度 3:1 门槛，同时与仓库里所有其它「固定深色宿主」的焦点环规则一致
+（`shape_chip_*`、`selector_search_scope_item`、`selector_exit_confirm_*` 都是白环）。
+
+另外修正了选择器分支顺序：原稿把 `state_selected` 放在 `state_focused` 之前，
+所以「正在播放 + 获得焦点」的剧集行会命中 selected 分支而**吞掉焦点环**。
+现在 `state_focused` 在最前，焦点环永远优先；`state_selected` 仍保留绿色填充
+作为「正在播放」的持久标记（与 `tv_item_current_ring` 的绿色语义一致）并配 2dp 白环，
+与焦点态的 3dp 形成既有的「焦点 3dp / 当前 2dp」分档。
+
+### 11.3 新增全库不变量
+
+§9 的宽度断言是**白名单式**的（只检查名单内文件），新增文件不会被覆盖。
+本轮新增 `TvFocusRingContractTest.noLeanbackFocusRingHardcodesItsWidth`：
+直接扫描整个 `app/src/leanback/res/drawable`，对**每个**焦点态描边断言宽度必须等于
+`@dimen/webhtv_focus_ring_width`。只有上面表格里那两个文件豁免，豁免理由写在该测试的
+Javadoc 里，豁免列表本身即契约。
+
+变异检验：把 `selector_episode_dialog_page.xml` 的焦点环宽度改回 `2dp` 后重跑，
+`noLeanbackFocusRingHardcodesItsWidth` 与
+`appSurfaceFocusRingsShareOneWidthTokenAndAThemeColour` **两项转红**；恢复后全绿。
+测试还断言至少扫描到 15 处焦点态描边，避免以后目录结构调整导致它变成空断言。
+
+### 11.4 本轮验证证据
+
+| 检查 | 结果 |
+| --- | --- |
+| 全库焦点态描边宽度扫描（脚本，独立于测试） | 仅剩 2 个已豁免文件 |
+| `:app:testLeanbackArm64_v8aDebugUnitTest` | 4155 tests / 0 failures |
+| `:app:testMobileArm64_v8aDebugUnitTest` | 4980 tests / 0 failures |
+| `TvFocusRingContractTest` | 11/11 |
+| `TvAppSurfaceFocusRingDeviceTest`（像素级栅格化） | 6/6 |
+| `scripts/check_ui_tokens.sh` | `hex_drawables=0`、`violations=1`（= 基线） |
+| 变异检验 | 改回 2dp 后 2 项转红，恢复后全绿 |
+
+**仍未完成的实机复核**：dev1 模拟器（`192.168.50.3:5555`）在整轮工作中持续离线
+（`ping` 100% 丢包、ARP FAILED、四个端口全部 closed），因此未能做 D-pad 逐项截图复核。
+本轮的替代证据是 Robolectric `GraphicsMode.NATIVE` 真实栅格化后的逐像素厚度/颜色度量
+（含 day/night 跟随与变异检验），覆盖用户报告的三个具体现象（蓝/白、粗细、主题跟随）。
