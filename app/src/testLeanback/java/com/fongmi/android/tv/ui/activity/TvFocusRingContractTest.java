@@ -464,6 +464,133 @@ public class TvFocusRingContractTest {
         return colour.group(1);
     }
 
+    // ------------------------------------------------------------ R6 播放页环：统一宽度 + 主题派生色
+
+    /**
+     * 用户报告（2026-10-10 第三轮，dev1 实机）：
+     * <blockquote>播放页按钮的边框太粗了，按钮和播放器选中后的边框颜色也不统一，
+     * 请统一且都受到主题色彩控制</blockquote>
+     *
+     * <p>实机实测（1920×1080，2.35px/dp）：播放页同时存在两族环——
+     * {@code selector_chip}（14+26 个 Control 按钮）走 1.5dp 写死白，
+     * {@code selector_video_item}（11 个文本按钮）走 3dp {@code ?attr/tvFocusRing}，
+     * 而「当前播放」走 2dp 写死绿 {@code #2CC56F}；同一屏上三种宽度、三种颜色。
+     *
+     * <p>本测试把播放页（视频层）的两个不变量钉死：
+     * <ol>
+     *   <li>所有播放页焦点/当前态环的宽度都引用 {@code @dimen/webhtv_focus_ring_width}；</li>
+     *   <li>环色都走视频层主题属性 {@code ?attr/tvPlayerRing} / {@code ?attr/tvPlayerCurrentRing}，
+     *       不得再写死白色或绿色。</li>
+     * </ol>
+     *
+     * <p><b>为什么播放页不能直接用 {@code ?attr/tvFocusRing}</b>：控制条**直接叠在视频上**，
+     * 最坏背景是视频亮场景（纯白）；而控制面板又是固定深箭玻璃。实测白环对纯白视频
+     * 1.00:1、浅色表 FOCUS 深蓝对玻璃 1.83:1——没有任何调色板原色能同时在两类背景上可见。
+     * 所以 {@code tvPlayerRing} 取的是 {@code ThemeResolver} 用 {@code readableAccent} 在
+     * 「纯白视频 + 三档玻璃」上夹取到 ≥3:1（WCAG 2.2 SC 1.4.11 非文本门槛）后的派生色，
+     * 保持用户 FOCUS / playerCurrent 槽的色相与彩度、只走明度。
+     */
+    @Test
+    public void playerFocusRingsShareOneWidthAndAThemeControlledColour() throws Exception {
+        // {文件, 必须出现的环色属性}
+        String[][] rings = {
+                {"selector_video_item.xml", "?attr/tvPlayerRing"},
+                {"shape_chip_focused.xml", "?attr/tvPlayerRing"},
+                {"shape_chip_round_focused.xml", "?attr/tvPlayerRing"},
+                {"shape_video_focused.xml", "?attr/tvPlayerRing"},
+                {"shape_subtitle_focused.xml", "?attr/tvPlayerRing"},
+                {"shape_subtitle_pressed.xml", "?attr/tvPlayerRing"},
+                {"shape_live_focused.xml", "?attr/tvPlayerRing"},
+                {"selector_control_sheet_button.xml", "?attr/tvPlayerRing"},
+        };
+        for (String[] entry : rings) {
+            String path = LEANBACK_DRAWABLE + entry[0];
+            String body = values(read(path));
+            assertTrue(path + " 的焦点环宽度必须引用唯一 token " + WIDTH,
+                    body.contains("android:width=\"" + WIDTH + "\""));
+            assertTrue(path + " 的焦点环色必须走视频层主题属性 " + entry[1], body.contains(entry[1]));
+            assertFalse(path + " 不允许再写死白色焦点环",
+                    body.contains("android:color=\"@color/white\"") || body.contains("android:color=\"#FFFFFF\""));
+        }
+
+        // 「当前播放/当前生效」态：统一宽度 + 独立的 tvPlayerCurrentRing（不再是写死绿）。
+        for (String name : new String[]{"selector_video_item.xml", "selector_control_sheet_button.xml",
+                "shape_chip_activated.xml", "shape_chip_round_activated.xml"}) {
+            String path = LEANBACK_DRAWABLE + name;
+            String body = values(read(path));
+            assertTrue(path + " 的当前态环必须走 tvPlayerCurrentRing", body.contains("?attr/tvPlayerCurrentRing"));
+            assertTrue(path + " 的当前态环宽度必须引用唯一 token", body.contains("android:width=\"" + WIDTH + "\""));
+        }
+
+        // 两个属性必须在 attrs 里声明、并在两个 flavor 的 Theme.Base 里绑定，否则解析不到会崩。
+        String attrs = read("app/src/main/res/values/attrs.xml");
+        for (String attr : new String[]{"tvPlayerRing", "tvPlayerCurrentRing"}) {
+            assertTrue("attrs.xml 必须声明 " + attr, attrs.contains("<attr name=\"" + attr + "\" format=\"color\" />"));
+        }
+        for (String styles : new String[]{"app/src/leanback/res/values/styles.xml",
+                "app/src/mobile/res/values/styles.xml"}) {
+            String body = read(styles);
+            assertTrue(styles + " 必须把 tvPlayerRing 绑到 tv_player_focus_ring",
+                    body.contains("<item name=\"tvPlayerRing\">@color/tv_player_focus_ring</item>"));
+            assertTrue(styles + " 必须把 tvPlayerCurrentRing 绑到 tv_player_current_ring",
+                    body.contains("<item name=\"tvPlayerCurrentRing\">@color/tv_player_current_ring</item>"));
+        }
+    }
+
+    /**
+     * 播放页派生色必须真的在两类极端背景上可读。
+     *
+     * <p>这是本轮的核心风险：浅色表 FOCUS 深蓝 {@code #0B57D0} 在固定玻璃上只有 1.83:1，
+     * 白环在纯白视频上只有 1.00:1。若以后有人把播放页环改回调色板原色或写死值，
+     * 本条会直接报出实测比值。
+     */
+    @Test
+    public void playerRingColoursClearNonTextContrastOnVideoAndGlass() throws Exception {
+        // 与 ThemeResolver.PLAYER_RING_BACKDROPS 同一组：纯白视频 + 三档玻璃。
+        int[] backdrops = {0xFFFFFFFF, 0xFF2F315E, 0xFF282955, 0xFF303463};
+        double minimum = 3.0;
+        // 与 ThemeTokens.light()/dark() 的 colorPlayerFocusRing/colorPlayerCurrentRing 同步。
+        int[][] rings = {
+                {0xFF447BF5, 0xFF00A95A},   // light
+                {0xFF7695C5, 0xFF00A95A},   // dark
+        };
+        for (int[] pair : rings) {
+            for (int colour : pair) {
+                for (int backdrop : backdrops) {
+                    double ratio = contrast(colour, backdrop);
+                    assertTrue(String.format(
+                                    "播放页环色 #%06X 对背景 #%06X 实测 %.2f:1，必须 ≥%.1f:1（WCAG 2.2 SC 1.4.11）",
+                                    colour & 0xFFFFFF, backdrop & 0xFFFFFF, ratio, minimum),
+                            ratio + 0.001 >= minimum);
+                }
+            }
+        }
+        // 回归钉子：证明「直接用调色板原色」确实不可行，防止后人再试。
+        assertTrue("浅色表 FOCUS #0B57D0 对固定玻璃本来就不可读（这条是派生存在的理由）",
+                contrast(0xFF0B57D0, 0xFF303463) < 3.0);
+        assertTrue("白环对纯白视频本来就不可读（这条是派生存在的理由）",
+                contrast(0xFFFFFFFF, 0xFFFFFFFF) < 3.0);
+    }
+
+    /** WCAG 相对亮度对比度，用于上面的播放页环断言。 */
+    private static double contrast(int first, int second) {
+        double a = luminance(first);
+        double b = luminance(second);
+        return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+    }
+
+    private static double luminance(int colour) {
+        double red = channel((colour >>> 16) & 0xFF);
+        double green = channel((colour >>> 8) & 0xFF);
+        double blue = channel(colour & 0xFF);
+        return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+    }
+
+    private static double channel(int value) {
+        double normalized = value / 255.0;
+        return normalized <= 0.04045 ? normalized / 12.92 : Math.pow((normalized + 0.055) / 1.055, 2.4);
+    }
+
     // ------------------------------------------------------------ R2 统一机制与宽度
 
     /**

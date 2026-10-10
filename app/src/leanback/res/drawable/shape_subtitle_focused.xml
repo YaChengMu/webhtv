@@ -11,6 +11,6 @@
 
     <stroke
         android:width="@dimen/webhtv_focus_ring_width"
-        android:color="@color/white" />
+        android:color="?attr/tvPlayerRing" />
 
 </shape>

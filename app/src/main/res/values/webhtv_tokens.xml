@@ -43,6 +43,8 @@
     <color name="webhtv_color_inverse_on_surface">#F1F0F4</color>
     <color name="webhtv_color_inverse_primary">#A8C7FA</color>
     <color name="webhtv_color_scrim">#52000000</color>
+    <color name="webhtv_color_player_focus_ring">#447BF5</color>
+    <color name="webhtv_color_player_current_ring">#00A95A</color>
     <color name="webhtv_color_shadow">#000000</color>
     <color name="webhtv_color_focus">#0B57D0</color>
     <color name="webhtv_color_player_control">#FFFFFF</color>

@@ -583,3 +583,127 @@ Javadoc 里，豁免列表本身即契约。
 - cache 按钮：恢复 `selector_cache_button_focus.xml` 与两个布局的 `android:foreground`、
   `CacheManagementDialog` 的 `setForeground`。
 - 集数名：把 `adapter_vod.xml` 的 remark 改回 `?attr/colorOnSurfaceVariant`。
+
+## 14. 追加：播放页环宽度统一 + 环色统一并受主题控制（2026-10-10 第三轮）
+
+### 14.1 用户原始要求
+
+> 播放页按钮的边框太粗了，按钮和播放器选中后的边框颜色也不统一，请统一且都受到主题色彩控制
+
+### 14.2 根因（dev1 实机实测，非推测）
+
+播放页同时存在**两族环**，各自写各自的宽度与颜色：
+
+| 族 | 消费方 | 旧宽度 | 旧环色 |
+| --- | --- | --- | --- |
+| `selector_chip` → `shape_chip_focused/round_focused` | `view_control_vod_action.xml` 26 个 + `view_control_live_action.xml` 14 个 `style=Control` 按钮（线路诊断/硬解能力/1x/原始/LUT/字幕/音轨/视轨/片头/片尾/弹幕/广告/定时/循环…） | 1.5dp（token） | **写死 `@color/white`** |
+| `selector_video_item` | 播放页 11 个文本按钮（简介/短显/搜索/换源/追更/重匹配/选集标题/倒序/视图/文件名）+ 4 个 adapter | **写死 3dp** | `?attr/tvFocusRing` |
+| `selector_control_sheet_button` | `dialog_control` 的 ControlSheetButton | 1.5dp（token） | 写死半透明白 |
+
+「当前播放/当前生效」态更乱：`shape_chip_activated` / `shape_chip_round_activated` **完全没有描边**，
+`selector_video_item` 的 activated 用写死绿 `#2CC56F`。
+
+实机量到（`pp_osd2.png`，2.35px/dp）：焦点按钮环带 **6px = 3dp**（`selector_video_item`），
+而同一屏的芯片族是 3px = 1.5dp —— 用户说的「边框太粗」就是 3dp 那一族。
+
+### 14.3 关键约束：播放页不能直接用调色板原色
+
+播放页控制条**直接叠在视频上**（`view_control_vod.xml` 背景 `@color/transparent`，
+`backdropMask` 的黑色渐变在播放态被视频遮住），另一类宿主是控制面板的固定深靛玻璃
+（`shape_dialog_control_glass_panel` 三档 `#2F315E/#282955/#303463`）。实测：
+
+| 候选环色 | 对纯白视频 | 对最暗玻璃 `#303463` |
+| --- | --- | --- |
+| 白 `#FFFFFF`（旧 A/C 族） | **1.00:1** | 11.69:1 |
+| FOCUS 浅色表 `#0B57D0` | 6.39:1 | **1.83:1** |
+| FOCUS 深色表 `#A8C7FA` | **1.72:1** | 6.80:1 |
+| 写死绿 `#2CC56F` | **2.25:1** | 5.19:1 |
+
+**没有任何调色板原色能同时在两类极端背景上达到 3:1** —— 白环在亮视频上消失、
+浅色表深蓝在玻璃上消失。这就是仓库既有契约把播放页列为「固定明暗宿主、环色与调色板无关」
+的原因，也是不能简单换成 `?attr/tvFocusRing` 的原因。
+
+### 14.4 方案：播放页专属主题派生环色（两类极端背景可读性夹取）
+
+新增 `ThemeTokens.colorPlayerFocusRing` / `colorPlayerCurrentRing`，由 `ThemeResolver`
+用仓库**已有的** `readableAccent(color, minimum, backdrops)` 派生：
+保持用户 FOCUS / `playerCurrent` 槽的**色相与彩度**、只走明度，直到在
+`PLAYER_RING_BACKDROPS = {纯白视频, 三档玻璃}` 上全部达到 `MIN_PLAYER_RING_CONTRAST = 3.0`
+（WCAG 2.2 SC 1.4.11 非文本门槛，与仓库 `outline`/`focus` 的 `ensureContrast(..., 3.0)` 同口径；
+不用 4.5 是因为那是正文文本档位，会把浅色表的蓝压得过暗）。
+
+派生结果（编译期默认值，写入 `webhtv_tokens.xml`）：
+
+| 槽位 | light | dark |
+| --- | --- | --- |
+| `colorPlayerFocusRing`（← FOCUS 槽） | `#447BF5`（FOCUS `#0B57D0` 夹取） | `#7695C5`（FOCUS `#A8C7FA` 夹取） |
+| `colorPlayerCurrentRing`（← playerCurrent 槽） | `#00A95A` | `#00A95A` |
+
+主题属性 `?attr/tvPlayerRing` / `?attr/tvPlayerCurrentRing`（`attrs.xml` 声明，
+两个 flavor 的 `Theme.Base` 绑定），与 `?attr/tvFocusRing` 同族、同样受主题表控制。
+
+**分层规则**（本轮固化，与 §9.3「宿主决定环色来源」一致）：
+
+- **视频层**（叠在视频/固定玻璃上）→ `tvPlayerRing` / `tvPlayerCurrentRing`
+- **应用表面**（叠在调色板表面上，含与详情页/手机版共用的 `selector_episode_card`、
+  `selector_tmdb_*`）→ `tvFocusRing` / `tvCurrentRing`
+
+### 14.5 新增用户可编辑槽位：播放中环色
+
+「当前播放/当前生效」环色此前是写死绿，本轮提升为**独立用户槽位**：
+
+- `ThemeProfile.SlotSet.playerCurrent`（JSON 字段 `playerCurrent`，与 `focus` 同级）
+- `ThemeEditor.Slot.PLAYER_CURRENT`（`isColor()` 覆盖）
+- `ThemeProfileValidator.validateSlots` 校验
+- `ThemePreviewView` 新增「播放器」分组（标签「播放中环色」/“Playing ring”）
+- `ThemePresets` 各内置色板同步写入（默认沿用成功色语义绿）
+
+主题编辑器改该槽时，`ThemeResolver` 会重新夹取，因此用户选的任何颜色都会落到
+两类极端背景上可读的档位。
+
+### 14.6 变更清单
+
+| 文件 | 变更 |
+| --- | --- |
+| `ThemeTokens.java` | 新增 `colorPlayerFocusRing` / `colorPlayerCurrentRing` 两个 record 分量 + 两个字面量构造 |
+| `ThemeResolver.java` | `PLAYER_RING_BACKDROPS` / `MIN_PLAYER_RING_CONTRAST`；`readableAccent` 增加显式门槛重载；`applyProfile` 派生两个环色；`derive` 透传 |
+| `attrs.xml` / `webhtv_attrs.xml` | 声明 `tvPlayerRing` / `tvPlayerCurrentRing` 与 `webhtvColorPlayer*Ring` |
+| `{leanback,mobile}/values/styles.xml` | `Theme.Base` 绑定两个新属性 |
+| `webhtv_tokens.xml` / `values-night/` | 新增两个 token（编译期默认 = 夹取后的可读值） |
+| `colors.xml` | `tv_player_focus_ring` / `tv_player_current_ring` 代理色 |
+| `strings.xml` ×3 | `theme_editor_slot_player_current` / `theme_editor_group_player` |
+| `ThemeProfile/ThemeEditor/ThemeProfileValidator/ThemePreviewView/ThemePresets` | `playerCurrent` 槽位全链路 |
+| `selector_video_item.xml` | 焦点 3dp→token、`tvFocusRing`→`tvPlayerRing`；当前态 2dp→token、`tvCurrentRing`→`tvPlayerCurrentRing` |
+| `shape_chip_focused.xml` / `shape_chip_round_focused.xml` | 写死白 → `?attr/tvPlayerRing` |
+| `shape_chip_activated.xml` / `shape_chip_round_activated.xml` | **新增**当前态描边（token 宽 + `?attr/tvPlayerCurrentRing`） |
+| `selector_control_sheet_button.xml` | 三态写死半透明白 → `?attr/tvPlayerRing` / `?attr/tvPlayerCurrentRing`；常态 → `?attr/tvNormalStroke` |
+| `shape_video_focused/subtitle_focused/subtitle_pressed/live_focused` | 写死白 → `?attr/tvPlayerRing` |
+
+### 14.7 本轮验证证据
+
+| 检查 | 结果 |
+| --- | --- |
+| `TvFocusRingContractTest` | 16/16（新增 `playerFocusRingsShareOneWidthAndAThemeControlledColour`、`playerRingColoursClearNonTextContrastOnVideoAndGlass`） |
+| `NativeEnhancedPlaybackStyleFocusTest` | 同步更新为「统一宽度 + 视频层主题色」 |
+| `ThemeContractTest` / `ThemeEditor*` / `ThemePresets*` | 全绿（色板资源数 49→51、槽位新增 `playerCurrent`） |
+| `:app:testLeanbackArm64_v8aDebugUnitTest` | 4163 tests / 0 failures |
+| `:app:testMobileArm64_v8aDebugUnitTest` | 4980 tests / 0 failures |
+| `scripts/check_ui_tokens.sh` | `violations=1`（= 基线）、`hex_drawables=0`、`contrast failures=0` |
+
+实机复核（dev1，覆盖安装同签名 Debug 包）：
+
+| 量 | 修复前 | 修复后 |
+| --- | --- | --- |
+| 焦点按钮环带宽度 | **6px = 3dp** | **3px = 1.5dp** |
+| 当前态按钮环带宽度 | 2dp（或芯片族完全无描边） | **3px = 1.5dp** |
+| 焦点环色 | 写死白 `#FFFFFF` | **`#447BF5`**（= 派生值，逐字节一致） |
+| 当前态环色 | 写死绿 `#2CC56F`（对亮视频 2.25:1） | **`#00A95A`**（= 派生值，逐字节一致） |
+
+焦点环与当前态环在同一屏上现在**同宽同源**，且都随主题 FOCUS / 播放中环色槽变化。
+
+### 14.8 回滚
+
+- 环：把 9 个 drawable 的 `android:color` 改回 `@color/white`（或 `?attr/tvFocusRing`）、
+  `selector_video_item` 的两个宽度改回 `3dp`/`2dp`。
+- 槽位：移除 `SlotSet.playerCurrent` 与 `ThemeEditor.Slot.PLAYER_CURRENT` 及编辑器分组。
+- 派生：移除 `ThemeResolver` 的两个环色派生与 `ThemeTokens` 的两个分量。

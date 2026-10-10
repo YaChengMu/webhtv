@@ -104,7 +104,7 @@ public class ThemeContractTest {
 
     private static void assertResourceMapping(ThemeTokens tokens, Path path) throws Exception {
         Map<String, Integer> colors = colors(path);
-        assertEquals(49, colors.size());
+        assertEquals(51, colors.size());
         for (RecordComponent component : ThemeTokens.class.getRecordComponents()) {
             if (!component.getType().equals(int.class)) continue;
             String name = component.getName();

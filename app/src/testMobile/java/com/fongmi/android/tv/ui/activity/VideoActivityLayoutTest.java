@@ -1499,9 +1499,10 @@ public class VideoActivityLayoutTest {
                 && source.contains("mArrayAdapter.setSelectedPosition(position);")
                 && arrayAdapter.contains("setActivated(position == selectedPosition)")
                 && segmentSelector.contains("android:state_activated=\"true\"")
-                // 当前生效态的颜色已从主题 colorPrimary 收敛到统一语义 token，
-                // 取值集中在 app/src/main/res/values/colors.xml。
-                && segmentSelector.contains("android:color=\"?attr/tvCurrentRing\""));
+                // 当前生效态的颜色已收敛到视频层统一语义 token：
+                // 2026-10-10 第三轮从 ?attr/tvCurrentRing 改为 ?attr/tvPlayerCurrentRing
+                // （播放页控制条直接叠在视频上，需要两类极端背景可读性夹取后的派生色）。
+                && segmentSelector.contains("android:color=\"?attr/tvPlayerCurrentRing\""));
     }
 
     @Test

@@ -7,9 +7,13 @@
     常态描边保持 1dp：它表达的是「未聚焦的轮廓」，不属于焦点环，与
     selector_video_item 的 1dp tvNormalStroke 分档一致。
 
-    环色保持与调色板无关的白色：本控件叠在播放页的固定深色玻璃面板
-    （shape_dialog_control_glass_panel）上，按「宿主机明暗固定 → 环色与调色板无关」
-    的规则取白；这也是仓库既有契约里明确保留的播放器层。
+    环色：?attr/tvPlayerRing / ?attr/tvPlayerCurrentRing。此前焦点/按下/当前三态写死半透明白，
+    于是播放页里同时存在白环（本族）与主题蓝环（selector_video_item）、绿环（当前态），
+    用户报告「按钮和播放器选中后的边框颜色也不统一」。本控件叠在播放页固定深箭玻璃面板
+    （shape_dialog_control_glass_panel）上，浅色表 FOCUS 深蓝在它上面只有 1.83:1，
+    所以不能用 ?attr/tvFocusRing；tvPlayerRing 是 ThemeResolver 在「视频亮场景 + 固定玻璃」
+    两类极端背景上夹取到 ≥3:1 的派生色，既跟随主题又始终可见。
+    半透明层次（pressed/focused/selected 的 alpha 差异）保留，只把色相换成主题派生色。
 -->
 <ripple xmlns:android="http://schemas.android.com/apk/res/android"
     android:color="#33FFFFFF">
@@ -21,7 +25,7 @@
                     <solid android:color="#5CFFFFFF" />
                     <stroke
                         android:width="@dimen/webhtv_focus_ring_width"
-                        android:color="#D9FFFFFF" />
+                        android:color="?attr/tvPlayerCurrentRing" />
                 </shape>
             </item>
             <item android:state_focused="true">
@@ -30,7 +34,7 @@
                     <solid android:color="#4DFFFFFF" />
                     <stroke
                         android:width="@dimen/webhtv_focus_ring_width"
-                        android:color="#BFFFFFFF" />
+                        android:color="?attr/tvPlayerRing" />
                 </shape>
             </item>
             <item android:state_selected="true">
@@ -39,7 +43,7 @@
                     <solid android:color="#5CFFFFFF" />
                     <stroke
                         android:width="@dimen/webhtv_focus_ring_width"
-                        android:color="#BFFFFFFF" />
+                        android:color="?attr/tvPlayerCurrentRing" />
                 </shape>
             </item>
             <item>
@@ -48,7 +52,7 @@
                     <solid android:color="#1FFFFFFF" />
                     <stroke
                         android:width="1dp"
-                        android:color="#14FFFFFF" />
+                        android:color="?attr/tvNormalStroke" />
                 </shape>
             </item>
         </selector>

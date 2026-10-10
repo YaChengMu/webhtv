@@ -3,18 +3,14 @@
     电视版「视频层」方角芯片（播放页解析线路 chip，宿主 view_control_vod.xml 是叠加在视频画面
     上的透明控制条）的统一焦点环。
 
-    这里只统一**宽度**（@dimen/webhtv_focus_ring_width；此前写死 1.5dp，与同一播放页
-    其它芯片写死的 3dp 不一致），环色刻意保持与调色板无关的白色。
+    环宽：@dimen/webhtv_focus_ring_width（与播放页其余按钮、当前态同宽）。
 
-    理由（与 shape_chip_round_focused.xml 同一判据）：该控件直接叠在视频画面上，宿主背景是
-    {@code @color/transparent}，没有任何调色板表面可以保证对比度。若改取 ?attr/tvFocusRing，
-    浅色表的 FOCUS 槽（深蓝）画在播放页控制层（shape_dialog_control_glass_panel，固定深靛玻璃）
-    上只有约 1.9:1，焦点环会看不见；白色约 12:1。
-
-    这条边界与仓库既有契约一致：播放器视频层焦点（selector_control_sheet_button、
-    shape_video_focused、shape_subtitle_focused、shape_live_focused）保持白色不变
-    （见 docs/TV-FOCUS-RING-20261004-unified-theme-ring.md 的非目标一节）。
-    宿主为调色板表面的应用页面焦点环见 shape_item_focused.xml / shape_vod_focused.xml。
+    环色：?attr/tvPlayerRing。此前这里写死白色，于是同一个播放页里出现了三套环色
+    （芯片白、文本按钮主题蓝、选中态绿），用户报告「按钮和播放器选中后的边框颜色也不统一」。
+    播放页不能直接用 ?attr/tvFocusRing：控制条**直接叠在视频上**，浅色表 FOCUS 深蓝在
+    固定深靛玻璃（shape_dialog_control_glass_panel）上只有 1.83:1，而白环在视频亮场景
+    上只有 1.00:1（均为 dev1 实机实测）。tvPlayerRing 是 ThemeResolver 在「视频亮场景 +
+    固定玻璃」两类极端背景上夹取到 ≥3:1 的派生色，因此它既跟随主题、又始终可见。
 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
@@ -29,6 +25,6 @@
 
     <stroke
         android:width="@dimen/webhtv_focus_ring_width"
-        android:color="@color/white" />
+        android:color="?attr/tvPlayerRing" />
 
 </shape>

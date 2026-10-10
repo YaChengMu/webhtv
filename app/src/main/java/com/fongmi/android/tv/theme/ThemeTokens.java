@@ -43,6 +43,13 @@ public record ThemeTokens(
         int colorShadow,
         int colorFocus,
         float focusScale,
+        /**
+         * 播放页（视频层）焦点环色。由 FOCUS 槽派生并在固定玻璃面板上做了 ≥4.5:1 的可读性夹取，
+         * 因为播放页控制条是叠在视频上的固定深靛玻璃：浅色表的 FOCUS 深蓝在它上面只有 1.83:1。
+         */
+        int colorPlayerFocusRing,
+        /** 播放页「当前播放/当前生效」环色。有独立的用户可编辑槽位（profile 的 playerCurrent）。 */
+        int colorPlayerCurrentRing,
         float dialogOpacity,
         int colorPlayerControl,
         int colorPlayerControlMuted,
@@ -98,6 +105,8 @@ public record ThemeTokens(
             0xFF000000,
             0xFF0B57D0,
             1.0f,
+            0xFF447BF5,
+            0xFF00A95A,
             1.0f,
             0xFFFFFFFF,
             0xCCFFFFFF,
@@ -154,6 +163,8 @@ public record ThemeTokens(
             0xFF000000,
             0xFFA8C7FA,
             1.1f,
+            0xFF7695C5,
+            0xFF00A95A,
             1.0f,
             0xFFFFFFFF,
             0xCCFFFFFF,

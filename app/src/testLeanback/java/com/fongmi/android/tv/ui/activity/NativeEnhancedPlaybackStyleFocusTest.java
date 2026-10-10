@@ -57,45 +57,58 @@ public class NativeEnhancedPlaybackStyleFocusTest {
 
     @Test
     public void everySelectableSurfaceSharesOneFocusSpec() throws Exception {
-        // 方形芯片与选集卡统一 8dp 圆角。
-        // 注意：选集卡（EPISODE_CARD_SELECTOR）是卡片的 foreground，它的声明圆角必须取
-        // 宿主圆角 − w/2（见 TvFocusRingContractTest.foregroundRingsDeclareTheirHostCorner
-        // MinusHalfTheRingWidth 与 docs §12.2），所以这里不再要求它写死 8dp。
-        for (String selector : new String[]{CHIP_SELECTOR, EPISODE_CARD_SELECTOR}) {
-            String body = values(read(selector));
-            assertTrue(selector + " 的焦点态必须是 3dp 焦点语义属性",
-                    body.contains("android:width=\"3dp\" android:color=\"?attr/tvFocusRing\""));
-            assertFalse(selector + " 不允许再出现白色焦点环", body.contains("android:color=\"@color/white\"")
-                    || body.contains("android:color=\"#FFFFFF\""));
-            assertFalse(selector + " 的值不允许再出现硬编码焦点色，必须走主题属性",
-                    body.contains("#FFD166") || body.contains("#FFE16A") || body.contains("#0077FF"));
-        }
-        assertTrue(CHIP_SELECTOR + " 的圆角必须统一为 8dp",
-                values(read(CHIP_SELECTOR)).contains("<corners android:radius=\"8dp\" />"));
+        // 2026-10-10 第三轮（用户报告「播放页按钮边框太粗、按钮与选中态边框颜色不统一」）：
+        // 播放页（视频层）的焦点环与当前态环统一到同一宽度 token，并统一走视频层主题派生色。
+        //
+        // 分层（仓库既有「宿主分层规则」）：
+        //   视频层环（叠在视频/固定玻璃上）→ tvPlayerRing / tvPlayerCurrentRing
+        //     取值 = ThemeResolver 在「视频亮场景(纯白) + 固定玻璃」两类极端背景上夹取到 ≥3:1 的派生色
+        //     （浅色表 FOCUS 深蓝在玻璃上 1.83:1、白环在亮视频上 1.00:1，均不可直接用）
+        //   应用表面环（叠在调色板表面上，含与详情页/手机版共用的卡片）→ tvFocusRing / tvCurrentRing
+        String episode = values(read(EPISODE_CARD_SELECTOR));
+        assertTrue("选集卡（应用表面，与详情页/手机版共用）焦点环必须继续走 tvFocusRing",
+                episode.contains("android:color=\"?attr/tvFocusRing\""));
+        assertTrue("选集卡当前态必须继续走 tvCurrentRing",
+                episode.contains("android:color=\"?attr/tvCurrentRing\""));
 
-        // 演员卡是圆角卡片，焦点环必须与宿主卡片圆角对齐（声明值 = 宿主圆角 − w/2，
-        // 而不是直接写宿主圆角，否则环外边界会大 w/2、卡片圆角露出环外）。
+        String chip = values(read(CHIP_SELECTOR));
+        assertTrue("播放页芯片焦点态必须引用统一宽度 token",
+                chip.contains("android:width=\"@dimen/webhtv_focus_ring_width\""));
+        assertTrue("播放页芯片（视频层）焦点环必须走 tvPlayerRing（受主题控制）",
+                chip.contains("android:color=\"?attr/tvPlayerRing\""));
+        assertFalse("播放页芯片不允许再出现写死白色焦点环",
+                chip.contains("android:color=\"@color/white\"") || chip.contains("android:color=\"#FFFFFF\""));
+        assertFalse("播放页芯片不允许再出现硬编码焦点色，必须走主题属性",
+                chip.contains("#FFD166") || chip.contains("#FFE16A") || chip.contains("#0077FF"));
+        assertTrue(CHIP_SELECTOR + " 的圆角必须统一为 8dp",
+                chip.contains("<corners android:radius=\"8dp\" />"));
+
+        // 控制面板按钮（dialog_control）也在视频层固定玻璃上，同样统一到播放页派生色。
+        String sheet = values(read("app/src/leanback/res/drawable/selector_control_sheet_button.xml"));
+        assertTrue("控制面板按钮焦点环必须走 tvPlayerRing", sheet.contains("?attr/tvPlayerRing"));
+        assertTrue("控制面板按钮当前态环必须走 tvPlayerCurrentRing", sheet.contains("?attr/tvPlayerCurrentRing"));
+
+        // 演员卡是圆角卡片（应用表面层，详情页），本轮只保证圆角对齐宿主。
         String cast = values(read(CAST_FOCUS_SELECTOR));
-        assertTrue("演员卡焦点态必须是 3dp 焦点语义属性",
-                cast.contains("android:width=\"3dp\" android:color=\"?attr/tvFocusRing\""));
-        assertTrue("演员卡当前态必须是 2dp 当前语义属性",
-                cast.contains("android:width=\"2dp\" android:color=\"?attr/tvCurrentRing\""));
         assertTrue("演员卡宿主卡片圆角仍必须走共享尺寸 token",
                 read("app/src/main/res/layout/adapter_tmdb_cast.xml").contains("app:cardCornerRadius=\"@dimen/webhtv_card_radius_large\""));
-        assertTrue("演员卡焦点环声明圆角必须小于宿主圆角（实测 9.5dp 在四档密度下 0 溢出）",
+        assertTrue("演员卡焦点环声明圆角必须小于宿主圆角（实测 9.5dp 四档密度 0 溢出）",
                 cast.contains("<corners android:radius=\"9.5dp\" />"));
-        assertFalse("演员卡不允许再出现白色焦点环", cast.contains("android:color=\"@color/white\""));
+        assertFalse("演员卡不允许再出现写死白色焦点环", cast.contains("android:color=\"@color/white\""));
     }
 
     @Test
-    public void chipSelectorKeepsCurrentStateAtTwoDpAndNormalStateAtOneDp() throws Exception {
+    public void chipSelectorKeepsCurrentStateAtTheUnifiedWidthAndNormalStateAtOneDp() throws Exception {
         String body = squeeze(read(CHIP_SELECTOR));
-        assertTrue("当前播放环必须是 2dp 当前态语义属性",
-                body.contains("android:width=\"2dp\" android:color=\"?attr/tvCurrentRing\""));
+        // 2026-10-10 第三轮：当前态也收进统一宽度 token（此前 2dp）。
+        assertTrue("当前播放环必须引用统一宽度 token",
+                body.contains("android:width=\"@dimen/webhtv_focus_ring_width\""));
         assertTrue("常态必须补上 1dp 常态描边，消除「没有边框颜色」的芯片",
                 body.contains("android:width=\"1dp\" android:color=\"?attr/tvNormalStroke\""));
         assertTrue("state_selected 仍然只承担跑马灯开关，不能加描边",
                 body.contains("跑马灯开关"));
+        assertTrue("chip selector 的 activated 分支（selector_chip→shape_chip_activated）必须走 tvPlayerCurrentRing",
+                values(read("app/src/leanback/res/drawable/shape_chip_activated.xml")).contains("?attr/tvPlayerCurrentRing"));
     }
 
     @Test

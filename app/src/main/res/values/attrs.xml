@@ -8,6 +8,18 @@
     <attr name="tvFocusRing" format="color" />
     <attr name="tvCurrentRing" format="color" />
     <attr name="tvNormalStroke" format="color" />
+    <!--
+        播放页（视频层）环色。播放页控制条**直接叠在视频上**，最坏背景是视频亮场景（白墙/雪），
+        而控制面板又是固定深箭玻璃：白环在亮视频上只有 1.00:1，浅色表的 FOCUS 深蓝在玻璃上只有
+        1.83:1（均为 dev1 实机实测）。因此播放页环色是一个**经过两类极端背景可读性夹取**的
+        主题派生色（保持用户 FOCUS / playerCurrent 槽的色相与彩度、只走明度到 ≥3:1），
+        而不是直接把 ?attr/tvFocusRing 搬过来。
+
+        取值见 colors.xml 的 tv_player_*，由 ThemeResolver 从主题槽位派生；
+        leanback / mobile 的 Theme.Base 负责把属性绑到该取值。
+    -->
+    <attr name="tvPlayerRing" format="color" />
+    <attr name="tvPlayerCurrentRing" format="color" />
 
     <declare-styleable name="CustomRecyclerView">
         <attr name="android:minWidth" />
