@@ -58,7 +58,6 @@ import com.fongmi.android.tv.bean.Danmaku;
 import com.fongmi.android.tv.bean.Episode;
 import com.fongmi.android.tv.bean.EpisodePositionCache;
 import com.fongmi.android.tv.bean.Flag;
-import com.fongmi.android.tv.theme.ThemeController;
 import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.ui.helper.EpisodeSeasonSnapshot;
 import com.fongmi.android.tv.bean.History;
@@ -212,7 +211,6 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
-import android.graphics.drawable.InsetDrawable;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -271,14 +269,6 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
      * 相邻两次采样的字节差算出的：窗口短于一跳就永远只能拿到没有间隔的首跳（空白）。
      * 取 1.2s 留出余量，避免收圈与首跳采样同帧竞争。
      */
-    /**
-     * 全屏播放时画面框焦点环的内缩距离与圆角。
-     *
-     * <p>全屏时 {@code @id/video} 铺满整屏，卡片自身的 foreground 环会贴着屏幕物理边缘被切掉，
-     * 所以改为在画面**内侧**画一圈；既不切掉，也不侵入画面中央。
-     */
-    private static final int FULLSCREEN_RING_INSET_DP = 12;
-    private static final int FULLSCREEN_RING_RADIUS_DP = 8;
     private static final long SEEK_PROGRESS_MIN_VISIBLE_MS = 1200L;
     private static final long LYRICS_OFFSET_MIN_MS = -5000L;
     private static final long LYRICS_OFFSET_MAX_MS = 5000L;
@@ -4343,34 +4333,10 @@ private boolean runtimeSourceOnly;
         return enter;
     }
 
-    /**
-     * 全屏播放时画面框的内缩焦点环。
-     *
-     * <p>宽度取 {@code @dimen/webhtv_focus_ring_width}（全 TV 唯一来源），
-     * 颜色取 {@code ?attr/tvPlayerRing} 同一来源（{@link ThemeController#focusRingColor}），
-     * 与内嵌态的画面框环保持一致；用 {@link InsetDrawable} 推到画面内侧，
-     * 避免全屏时被屏幕边缘切掉。
-     */
-    private Drawable fullscreenVideoRing() {
-        GradientDrawable ring = new GradientDrawable();
-        ring.setShape(GradientDrawable.RECTANGLE);
-        ring.setColor(0);
-        ring.setCornerRadius(ResUtil.dp2px(FULLSCREEN_RING_RADIUS_DP));
-        ring.setStroke(getResources().getDimensionPixelSize(R.dimen.webhtv_focus_ring_width),
-                ThemeController.focusRingColor(this));
-        int inset = ResUtil.dp2px(FULLSCREEN_RING_INSET_DP);
-        return new InsetDrawable(ring, inset, inset, inset, inset);
-    }
-
     private void enterFullscreen() {
         mFocus1 = getCurrentFocus();
         mBinding.video.requestFocus();
-        // 全屏时画面铺满整屏，原来的 foreground 环（shape_video_focused，0dp 圆角）会贴在
-        // 屏幕物理边缘被切掉一半，以前的做法是直接 setForeground(null) —— 但 @id/video 在全屏
-        // 下仍然 focusable 且持有焦点，于是用户看到「可以聚焦但完全没反馈」
-        // （实机报告「这里没有选中效果，或者说看不出来」）。
-        // 改为在画面内侧画一圈内缩焦点环：宽度走唯一 token，颜色走视频层主题派生色。
-        mBinding.video.setForeground(fullscreenVideoRing());
+        mBinding.video.setForeground(null);
         mBinding.video.setLayoutParams(new RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.MATCH_PARENT, RelativeLayout.LayoutParams.MATCH_PARENT));
         mBinding.flag.setSelectedPosition(mFlagAdapter.getPosition());
         mKeyDown.setFull(true);

@@ -671,50 +671,6 @@ public class TvFocusRingContractTest {
         }
     }
 
-    // ------------------------------------------------------------ R7 全屏时不得失去焦点环
-
-    /**
-     * 用户报告（2026-10-10）：
-     * <blockquote>这里没有选中效果，或者说看不出来</blockquote>
-     * （附详情页/播放页大窗形态的实机截图）
-     *
-     * <p>根因：两个全屏入口都把焦点环整个去掉了，而宿主在两种形态下仍然 focusable：
-     * <ul>
-     *   <li>{@code VideoActivity.enterFullscreen()}：{@code mBinding.video.setForeground(null)}
-     *       —— 全屏后 {@code @id/video} 仍是 {@code focused=true}（uiautomator dump 实测），
-     *       于是「能聚焦但零反馈」；</li>
-     *   <li>{@code TmdbDetailActivity.updatePlayerPanelFocus()}：
-     *       {@code inlineFullscreen || inlinePiPLayout} 分支直接 {@code setStrokeWidth(0)} 后 return。</li>
-     * </ul>
-     *
-     * <p>两个入口现在都改为在画面**内侧**画一圈内缩焦点环：宽度走唯一 token、颜色走
-     * 视频层主题派生色，既不贴屏幕物理边缘被切掉，也不裁切画面。
-     * 栅格化端到端断言在 {@code TmdbDetailChipFillTest.fullscreenPlayerPanelDrawsAnInsetThemeFocusRing}。
-     */
-    @Test
-    public void fullscreenPlayerPathsKeepAnInsetFocusRing() throws Exception {
-        String video = read("app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java");
-        assertTrue("全屏播放不得再用 setForeground(null) 直接移除焦点环（用户报告的「看不出来」）",
-                !video.contains("mBinding.video.setForeground(null);\n        mBinding.video.setLayoutParams(new RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.MATCH_PARENT"));
-        assertTrue("全屏播放必须改为挂内缩焦点环",
-                video.contains("mBinding.video.setForeground(fullscreenVideoRing());"));
-        assertTrue("全屏内缩环必须存在实现", video.contains("private Drawable fullscreenVideoRing()"));
-        assertTrue("全屏内缩环宽度必须引用唯一 token",
-                video.contains("R.dimen.webhtv_focus_ring_width"));
-        assertTrue("全屏内缩环颜色必须走主题焦点槽",
-                video.contains("ThemeController.focusRingColor(this)"));
-        assertTrue("全屏内缩环必须用 InsetDrawable 推到画面内侧",
-                video.contains("new InsetDrawable(ring,"));
-
-        String detail = read("app/src/main/java/com/fongmi/android/tv/ui/activity/TmdbDetailActivity.java");
-        assertTrue("详情页内嵌播放器的全屏/PiP 分支不得再无条件清零焦点环",
-                !detail.contains("if (inlineFullscreen || inlinePiPLayout) {\n            binding.playerPanel.setStrokeColor(0x00000000);\n            binding.playerPanel.setStrokeWidth(0);\n            return;"));
-        assertTrue("详情页全屏/PiP 必须改为挂内缩焦点环",
-                detail.contains("binding.playerPanel.setForeground(focused ? insetFocusRing() : null);"));
-        assertTrue("详情页内缩环必须存在实现", detail.contains("private Drawable insetFocusRing()"));
-        assertTrue("详情页内缩环宽度必须引用唯一 token", detail.contains("focusRingWidthPx()"));
-    }
-
     // ------------------------------------------------------------ R2 统一机制与宽度
 
     /**

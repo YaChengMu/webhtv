@@ -13,7 +13,6 @@ import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
-import android.graphics.drawable.InsetDrawable;
 import android.graphics.drawable.LayerDrawable;
 import android.net.Uri;
 import android.os.Build;
@@ -282,14 +281,6 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.getDefault());
     private static final int CHIP_STROKE_DP = 1;
-    /**
-     * 全屏 / PiP 形态下内缩焦点环的边距与圆角。
-     *
-     * <p>面板铺满屏幕时，卡片自身的描边会贴在物理边缘（被切掉一半），所以改为在画面
-     * 内侧画一圈；边距既保证环完整可见，也不侵入画面中央。
-     */
-    private static final int PLAYER_FULLSCREEN_RING_INSET_DP = 12;
-    private static final int PLAYER_FULLSCREEN_RING_RADIUS_DP = 8;
     private static final int CHIP_MAX_WIDTH_DP = 240;
     private static final int PHOTO_PRELOAD_RADIUS = 2;
     private static final long BACKDROP_SLIDE_DELAY_MS = 10_000L;
@@ -2290,39 +2281,14 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private void updatePlayerPanelFocus(ThemeColors colors) {
         if (!isInlinePlayerMode()) return;
-        boolean focused = binding.playerPanel.hasFocus() && !hasFocusedChild(inlineControlsView());
         if (inlineFullscreen || inlinePiPLayout) {
-            // 全屏 / PiP 时面板铺满整个 root、圆角被设为 0，此时**不能**再用卡片自身的描边：
-            // 它贴着屏幕物理边缘，会被屏幕边/圆角切掉一半。但面板在这两种形态下仍然
-            // focusable（XML 里 focusable=true），若像以前那样把描边清零，用户就会看到
-            // 「可以聚焦但完全没反馈」——实机报告「这里没有选中效果，或者说看不出来」。
-            // 改为在**画面内侧**画一圈内缩前景环：不改变面板尺寸、不裁切画面，
-            // 宽度仍走唯一 token，颜色仍走主题 FOCUS 槽。
-            binding.playerPanel.setStrokeWidth(0);
             binding.playerPanel.setStrokeColor(0x00000000);
-            binding.playerPanel.setForeground(focused ? insetFocusRing() : null);
+            binding.playerPanel.setStrokeWidth(0);
             return;
         }
-        binding.playerPanel.setForeground(null);
+        boolean focused = binding.playerPanel.hasFocus() && !hasFocusedChild(inlineControlsView());
         binding.playerPanel.setStrokeColor(focused ? focusStroke() : colors.line);
         binding.playerPanel.setStrokeWidth(focused ? focusRingWidthPx() : ResUtil.dp2px(CHIP_STROKE_DP));
-    }
-
-    /**
-     * 全屏 / PiP 形态下的内缩焦点环。
-     *
-     * <p>用 {@link InsetDrawable} 把描边推到画面内侧 {@link #PLAYER_FULLSCREEN_RING_INSET_DP}dp，
-     * 这样全屏时环不会贴在屏幕物理边缘被切掉，也不会遮盖画面中央内容。
-     * 宽度取 {@code @dimen/webhtv_focus_ring_width}，颜色取主题 FOCUS 槽。
-     */
-    private Drawable insetFocusRing() {
-        GradientDrawable ring = new GradientDrawable();
-        ring.setShape(GradientDrawable.RECTANGLE);
-        ring.setColor(0);
-        ring.setCornerRadius(ResUtil.dp2px(PLAYER_FULLSCREEN_RING_RADIUS_DP));
-        ring.setStroke(focusRingWidthPx(), focusStroke());
-        int inset = ResUtil.dp2px(PLAYER_FULLSCREEN_RING_INSET_DP);
-        return new InsetDrawable(ring, inset, inset, inset, inset);
     }
 
     private boolean isLeanbackInlinePlayerPanel() {

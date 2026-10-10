@@ -797,62 +797,46 @@ dp 字面量或 `*_DP` 常量（实测扫到 12 处）；配套
 - 宽度：把 6 个 Java 位置的 `focusRingWidthPx()` 换回 `ResUtil.dp2px(3)` 常量。
 - 契约测试与本文档属记录，随代码一并回滚即可。
 
-## 16. 追加：全屏播放不得失去焦点环（2026-10-10 第五轮）
+## 16. 追加：全屏播放画面**不要**焦点环（2026-10-10 第五轮，含一次被纠正的设计）
 
-### 16.1 用户原始要求
+### 16.1 用户要求与纠正过程
 
-> 这里没有选中效果，或者说看不出来
-> （附一张大窗形态播放画面截图）
+用户先报告（附大窗形态播放截图）：「这里没有选中效果，或者说看不出来」。
+据此实施了一版「全屏时在画面内侧画内缩环」的改动（commit `0209015d6`）。
 
-### 16.2 根因（像素级证据）
+随后用户纠正：
 
-用户截图（817×483）中，播放面板四边**完全没有描边色**：边界从黑直接过渡到紫灰壁纸
-（仅 1px 的 `#232228` 抗锯齿），候选环色（`#447BF5` / `#7695C5` / `#A8C7FA` / 白）**全部 0 像素**；
-面板四角为**直角**。
+> 全屏播放器内部不需要选中效果呀
+> 控制栏需要但是怎么整个播放界面套了一个？
 
-排查后确认有两个全屏入口都在**无条件移除焦点环**，而宿主在这两种形态下仍然 `focusable`：
+即：**需要焦点环的是控制栏按钮，不是整个播放画面**。`0209015d6` 把环套在整个播放界面上，
+属于过度设计，已用 `git revert` 完整回退。
 
-| 入口 | 旧行为 | 后果 |
+### 16.2 结论（本轮的最终设计决定）
+
+| 区域 | 是否需要焦点环 | 说明 |
 | --- | --- | --- |
-| `VideoActivity.enterFullscreen()` | `mBinding.video.setForeground(null)` | 全屏后 `@id/video` 仍 `focused="true"`（uiautomator dump 实测），但环被移除 |
-| `TmdbDetailActivity.updatePlayerPanelFocus()` | `inlineFullscreen \|\| inlinePiPLayout` 分支 `setStrokeColor(0) + setStrokeWidth(0)` 后 `return` | 面板仍 `focusable=true`，但环被清零 |
+| 全屏播放画面（`@id/video` / `playerPanel` 铺满时） | **不需要** | 全屏是「沉浸观看」状态，画面本身不是可选控件；加环反而干扰观感 |
+| 控制栏 / OSD 按钮（`selector_video_item`、`selector_chip`、`selector_control_sheet_button`） | **需要** | 这些才是遥控焦点真正停留的可选控件，环必须存在且已统一（见 §14） |
+| 内嵌（非全屏）播放面板 | **需要** | 此时面板是页面里的可选卡片，环表达「焦点在播放区」，且与卡片圆角对齐（见 §13） |
 
-即「**可以聚焦但零视觉反馈**」——这正是用户说的「没有选中效果，或者说看不出来」。
+因此全屏入口保持移除环的既有行为：
 
-### 16.3 修法（方案 A：画面内侧内缩环）
+- `VideoActivity.enterFullscreen()` → `mBinding.video.setForeground(null)`
+- `TmdbDetailActivity.updatePlayerPanelFocus()` → `inlineFullscreen || inlinePiPLayout` 分支清零描边后返回
 
-两个入口都改为在画面**内侧**画一圈焦点环，用 `InsetDrawable` 把描边推离屏幕物理边缘：
+这两处**不是缺陷**，而是刻意的产品行为；后续不要再把「全屏无环」当成 bug 去加环。
 
-- 宽度：`@dimen/webhtv_focus_ring_width`（全 TV 唯一来源）
-- 颜色：`ThemeController.focusRingColor()`（= `?attr/tvPlayerRing` 同一来源，视频层主题派生色）
-- 内缩：`12dp`；圆角：`8dp`
+### 16.3 教训（供后续排查参考）
 
-这样全屏时环完整可见（不会被屏幕边缘切掉一半），也不侵入画面中央内容。
+排查「看不出焦点」时，必须先确认**焦点当前停在哪个控件**（`uiautomator dump` 看
+`focused="true"` 的节点），再决定该控件是否**应当**有环。
+`@id/video` 在全屏时确实 `focused="true"`，但它是画面容器而非可操作控件——
+「有焦点」不等于「需要焦点环」。
 
-| 文件 | 变更 |
-| --- | --- |
-| `VideoActivity.java` | 新增 `fullscreenVideoRing()`；`enterFullscreen()` 由 `setForeground(null)` 改为 `setForeground(fullscreenVideoRing())` |
-| `TmdbDetailActivity.java` | 新增 `insetFocusRing()`；全屏/PiP 分支由清零改为 `setForeground(focused ? insetFocusRing() : null)` |
+### 16.4 回滚记录
 
-### 16.4 本轮验证证据
-
-| 检查 | 结果 |
-| --- | --- |
-| `TvFocusRingContractTest` | 19/19（新增 `fullscreenPlayerPathsKeepAnInsetFocusRing`） |
-| `TmdbDetailChipFillTest` | 3/3（新增 `fullscreenPlayerPanelDrawsAnInsetThemeFocusRing`：栅格化全屏面板，断言焦点态画出内缩主题环、非焦点态无环、环不触及屏幕物理边缘） |
-| `:app:testLeanbackArm64_v8aDebugUnitTest` | 4168 tests / 0 failures |
-| `:app:testMobileArm64_v8aDebugUnitTest` | 4981 tests / 0 failures |
-| `scripts/check_ui_tokens.sh` | `violations=1`（= 基线）、`hex_drawables=0`、`contrast failures=0` |
-
-实机复核（dev1，覆盖安装同签名 Debug 包，全屏播放态）：
-
-| 量 | 修复前 | 修复后 |
-| --- | --- | --- |
-| 全屏环色像素 | **0** | **17256 px** |
-| 环 bbox | 无 | `x 24..1895, y 24..1055`（内缩 24px = 12dp） |
-| 边界剖面（左/上） | 黑↔壁纸直连 | `#0B57D0` 环带清晰可见（约 4px） |
-
-### 16.5 回滚
-
-把两个入口恢复为 `setForeground(null)` / 清零分支，并移除 `fullscreenVideoRing()` 与
-`insetFocusRing()` 两个助手即可；两条新契约测试会同时转红。
+- `0209015d6`（全屏内缩环）已被完整 revert，两个入口恢复为移除环。
+- 同批次新增的两条契约测试（`fullscreenPlayerPathsKeepAnInsetFocusRing`、
+  `fullscreenPlayerPanelDrawsAnInsetThemeFocusRing`）随之移除，避免它们反过来要求错误行为。
+- 控制栏按钮的环（§14 的统一宽度 + 主题派生色）**未受影响**。
