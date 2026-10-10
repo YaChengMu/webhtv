@@ -2,7 +2,7 @@
 <!--
     电视版广告统计/拦截日志行的焦点态。
 
-    只统一**宽度**：@dimen/webhtv_focus_ring_width（3dp，此前写死 2dp），与电视端其余焦点环
+    只统一**宽度**：@dimen/webhtv_focus_ring_width（此前写死 2dp），与电视端其余焦点环
     一致，消除用户报告的「边框粗细也貌似不一样」。
 
     环色刻意保持与调色板无关的深蓝：宿主内容面板 shape_ad_stats_content 是固定浅色

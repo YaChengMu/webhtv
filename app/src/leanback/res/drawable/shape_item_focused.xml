@@ -2,7 +2,7 @@
 <!--
     电视版「应用表面」列表项/按钮的统一焦点环。统一规范见 selector_video_item.xml 与
     docs/TV-FOCUS-RING-20261004-unified-theme-ring.md：
-    - 环宽唯一来源：@dimen/webhtv_focus_ring_width（3dp），禁止写死 1.5dp/2dp；
+    - 环宽唯一来源：@dimen/webhtv_focus_ring_width，禁止写死 1.5dp/2dp；
     - 环色唯一来源：?attr/tvFocusRing（= @color/tv_item_focus_ring = 主题 FOCUS 用户槽）。
 
     此前这里写的是 `1.5dp ?attr/colorPrimary`，于是同一个电视首页上出现了两套焦点边框：

@@ -303,6 +303,55 @@ public class TvFocusRingContractTest {
         assertTrue(read("app/src/leanback/res/drawable/selector_vod.xml").contains("@drawable/shape_vod_focused"));
     }
 
+    // ------------------------------------------------------------ R2 卡片环圆角必须对齐宿主表面
+
+    /**
+     * 用户报告（2026-10-10 dev1 实机）：「边框在卡片上的圆角部分匹配不完美，感觉是圆角比卡片小，
+     * 导致卡片的圆角还露出一节了」。
+     *
+     * <p>根因是几何而非颜色：{@code shape_vod_focused} 是卡片的 <b>foreground</b>，而卡片的可见
+     * 表面另有自己的 8dp 圆角（图片走 {@code @style/Vod.Grid} 上圆角 8dp、标题块走
+     * {@code shape_vod_name} 下圆角 8dp；列表型宿主走 {@code shape_vod_list} 四角 8dp）。
+     * 描边型 {@code <shape>}（{@code GradientDrawable}）把描边中心线画在「内缩 w/2、圆角半径仍取
+     * 声明值」的路径上，所以环的 <b>外边界</b>圆角半径 = 声明值 + w/2。声明 8dp 时外边界为
+     * 8dp + w/2 &gt; 8dp，比卡片自身的弧更大，沿角落对角线卡片弧反而更靠外，露出 1–2px 月牙。
+     *
+     * <p>所以卡片环的声明圆角必须是 {@code 宿主圆角 - w/2}（理论值 8 - 0.75 = 7.25dp），再向下留
+     * 一点像素取整余量：描边宽度按整数像素向上取整（1.5dp @ density 3 = 4.5px → 5px），
+     * 若写满 7.25dp，在部分密度下环外边界会超出宿主弧 0.25–0.5px，仍会露出亚像素月牙；
+     * 生产取值 7dp 在 density 1/1.75/2/2.353/3/4 下均为 0 溢出（见
+     * {@code TvAppSurfaceFocusRingDeviceTest.cardRingOuterBoundaryContainsEveryCardSurfacePixel}）。
+     * 由于全部 6 个 {@code selector_vod} 宿主的可见表面都是 8dp，单一环仍可覆盖全部宿主——
+     * 这里的断言就是在钉死这条几何关系，并在宿主圆角分叉时立刻报警。
+     */
+    @Test
+    public void cardRingCornerRadiusIsTheHostRadiusMinusHalfTheRingWidth() throws Exception {
+        double width = dpValue(read(DIMENS), "webhtv_focus_ring_width");
+        double ringRadius = dpValue(values(read(LEANBACK_DRAWABLE + "shape_vod_focused.xml")), "android:radius");
+
+        // 宿主的可见表面圆角：图片型宿主的上圆角、标题块的下圆角、列表型宿主的四角。
+        double imageTop = dpValue(values(read("app/src/main/res/values/styles.xml")), "cornerSizeTopLeft");
+        double nameBottom = dpValue(values(read(LEANBACK_DRAWABLE + "shape_vod_name.xml")), "android:bottomLeftRadius");
+        double listAll = dpValue(values(read(LEANBACK_DRAWABLE + "shape_vod_list.xml")), "android:radius");
+
+        assertTrue("selector_vod 的 6 个宿主表面必须同圆角，否则一个环无法同时对齐（图片上圆角="
+                        + imageTop + "dp，标题块下圆角=" + nameBottom + "dp，列表四角=" + listAll + "dp）",
+                imageTop == nameBottom && nameBottom == listAll);
+        double ideal = imageTop - width / 2;
+        assertTrue("卡片环的声明圆角必须取 宿主圆角 - 环宽/2（" + ideal + "dp）再向下留像素取整余量，"
+                        + "且不得超过理论值：实际 " + ringRadius + "dp（环宽 " + width + "dp）",
+                ringRadius <= ideal + 0.01 && ringRadius >= ideal - 0.5);
+    }
+
+    /** 从 XML 文本里取出某个属性/dimen 的 dp 数值。 */
+    private static double dpValue(String xml, String key) {
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+                .compile(java.util.regex.Pattern.quote(key) + "[^>]*?>?([0-9.]+)dp")
+                .matcher(xml);
+        assertTrue("必须能在 XML 里找到 " + key + " 的 dp 取值", matcher.find());
+        return Double.parseDouble(matcher.group(1));
+    }
+
     // ------------------------------------------------------------ R2 统一机制与宽度
 
     /**
@@ -338,7 +387,9 @@ public class TvFocusRingContractTest {
     @Test
     public void thereIsExactlyOneFocusRingWidthInTheTvUi() throws Exception {
         assertTrue("必须声明唯一的焦点环宽度 token",
-                read(DIMENS).contains("<dimen name=\"webhtv_focus_ring_width\">3dp</dimen>"));
+                read(DIMENS).contains("<dimen name=\"webhtv_focus_ring_width\">"));
+        assertTrue("焦点环宽度 token 只能声明一次",
+                read(DIMENS).split("webhtv_focus_ring_width", -1).length == 2);
         // 报告涉及的两个页面必须引用同一个 token，且带焦点环的控件不允许写死描边宽度。
         // 注意：布局里可能有与焦点无关的描边（例如 item_following 的 MaterialCardView
         // 卡片外框 1dp），因此只约束真正带 focus_ring_ 环色的那个控件。

@@ -2,7 +2,7 @@
 <!--
     电视版「应用表面」选集弹窗（dialog_episode / adapter_episode_dialog）剧集行的统一焦点环。
 
-    环宽唯一来源：@dimen/webhtv_focus_ring_width（3dp）。此前写死 2dp，与电视端其余焦点环
+    环宽唯一来源：@dimen/webhtv_focus_ring_width。此前写死 2dp，与电视端其余焦点环
     不一致，是用户报告「边框粗细也貌似不一样」的同一族缺陷。
 
     环色统一为白色：宿主面板 shape_episode_dialog_panel 是固定深色（#DD111820，两张色板相同），
@@ -19,8 +19,9 @@
     2) 「正在播放的剧集在被聚焦时看不到焦点环」——原稿把 state_selected 放在 state_focused
        之前，所以「正在播放 + 获得焦点」的项会命中 selected 分支，焦点环被吞掉。
        现在把 focused 放在最前，焦点环永远优先显示；selected 仍保留绿色填充作为
-       「正在播放」的持久标记（与 tv_item_current_ring 的绿色语义一致），并配 2dp 白环，
-       与焦点态的 3dp 形成「焦点 3dp / 当前 2dp」的既有分档。
+       「正在播放」的持久标记（与 tv_item_current_ring 的绿色语义一致），并配 2dp 白环。
+       焦点态取 @dimen/webhtv_focus_ring_width（应用表面统一宽度，比「当前」态的 2dp 更细）：
+       两个状态靠绿色填充区分，而不是靠粗细差——「当前」是不随焦点出现/消失的持久标记。
 -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_focused="true">

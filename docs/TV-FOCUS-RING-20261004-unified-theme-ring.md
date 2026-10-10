@@ -115,7 +115,10 @@ app:cornerRadius="8dp"                    <!-- 没有任何 strokeColor / stroke
 
 1. **机制**：焦点态一律由 **边框环** 表达（`MaterialButton` 走 `app:strokeColor`+`app:strokeWidth`，
    普通 `shape` 走 `<stroke>`）。填充色变化可以保留，但不得作为唯一焦点线索。
-2. **宽度**：唯一定义 `@dimen/webhtv_focus_ring_width = 3dp`（与既有 `?attr/tvFocusRing` 3dp 规范一致）。
+2. **宽度**：唯一定义 `@dimen/webhtv_focus_ring_width`。**取值以实机验收为准**：2026-10-10
+   实机复核后定为 `1.5dp`（§12），不要再按「视频层更粗」的印象调粗——已在首页卡片上被用户判为「太粗」。
+2b. **圆角**：环作为卡片 `foreground` 时，声明圆角必须取 `宿主表面圆角 - w/2`（再留最多 0.5dp 的
+   像素取整余量），详见 §12.2。自成一个控件的背景环（`shape_item_focused` 等）无此问题。
 3. **颜色**：环色 = **该元素填充色的配对 on-色**（由主题色板生成，天然满足对比度门）：
 
 | 焦点态填充 | 环色 |
@@ -141,11 +144,12 @@ app:cornerRadius="8dp"                    <!-- 没有任何 strokeColor / stroke
 ## 6. 最小实施步骤
 
 1. `app/src/main/res/values/colors.xml`：`tv_item_focus_ring` → `@color/webhtv_color_focus`。
-2. `app/src/main/res/values/webhtv_dimens.xml`：新增 `webhtv_focus_ring_width = 3dp`。
+2. `app/src/main/res/values/webhtv_dimens.xml`：新增 `webhtv_focus_ring_width`（首版 3dp，
+   2026-10-10 实机验收后改为 1.5dp，见 §12）。
 3. 新增 `app/src/main/res/color/focus_ring_primary.xml`、`focus_ring_secondary.xml`、
    `focus_ring_error.xml`、`focus_ring_error_container.xml`（focused/pressed → 配对 on-色，其余 transparent）。
 4. `app/src/main/res/drawable/about_primary_icon_button.xml`：focused/pressed 改为
-   `?attr/colorPrimary` 填充 + 3dp `?attr/colorOnPrimary` 环（去掉写死 `#0B57D0`）。
+   `?attr/colorPrimary` 填充 + 焦点环宽度 token 的 `?attr/colorOnPrimary` 环（去掉写死 `#0B57D0`）。
 5. `app/src/main/res/layout/dialog_about.xml`：`checkUpdate`/`githubProxy`/`confirm` 增加描边通道。
 6. `app/src/main/res/layout/item_following.xml`：7 个 action 按钮增加描边通道（TV 实际使用的 item 布局）。
 7. `app/src/leanback/res/layout/activity_following.xml`：4 个顶栏按钮增加描边通道。
@@ -332,7 +336,7 @@ D-pad 逐项截图复核。同一批 drawable 的上一轮（§7.1）已在同�
 | `selector_danmaku_result_item.xml` | `2dp` | → token | 无消费者的旧文件，避免以后接回时带回旧规范 |
 | `selector_danmaku_search_action.xml` | `2dp` | → token | 同上 |
 | `shape_video_item_focused.xml` | `1.5dp` | → token | 无消费者的旧文件（已被 `selector_video_item` 取代） |
-| `selector_video_item.xml` | `3dp`（字面量） | **保留** | 它是电视版焦点环规范的**样板文件**，其他文件注释都指向它；字面量与 token 取值完全相同；`NativeEnhancedPlaybackStyleFocusTest` 把它当规范基准逐字断言。改它只会带来零视觉收益的跨任务测试改动 |
+| `selector_video_item.xml` | `3dp`（字面量） | **保留** | 它是**视频层**焦点环规范的**样板文件**，其他文件注释都指向它；`NativeEnhancedPlaybackStyleFocusTest` 把它当规范基准逐字断言。**视频层自成一档（焦点 3dp / 当前 2dp / 常态 1dp），与应用表面 token（现为 1.5dp）分属不同语义**，两者不要求同值（2026-10-10 §12 修正） |
 | `shape_audio_action_icon_focused.xml` | `1dp` | **保留** | 它不是容器焦点环，而是播放页音频按钮上带 `inset=3dp` 的**图标内描边环**（40dp 图标 / 17dp 圆角），角色与尺寸均不同，套 3dp 会把图标糊成一团 |
 
 ### 11.2 顺带修掉的缺陷：选集弹窗焦点不可见
@@ -387,3 +391,105 @@ Javadoc 里，豁免列表本身即契约。
 （`ping` 100% 丢包、ARP FAILED、四个端口全部 closed），因此未能做 D-pad 逐项截图复核。
 本轮的替代证据是 Robolectric `GraphicsMode.NATIVE` 真实栅格化后的逐像素厚度/颜色度量
 （含 day/night 跟随与变异检验），覆盖用户报告的三个具体现象（蓝/白、粗细、主题跟随）。
+
+## 12. 追加：应用表面焦点环宽度回到 1.5dp 与卡片环圆角对齐（2026-10-10 实机验收）
+
+### 12.1 用户原始要求
+
+§9/§11 上线后（dev1 实机 `192.168.50.3:5555`，三处环色已统一为蓝色 `?attr/tvFocusRing`），
+用户对首页实机截图提出两点：
+
+> 现在颜色是统一了但是默认的边框太粗了，一起的白色的那种宽度更好，再就是边框在卡片上的
+> 圆角部分匹配不完美感觉是圆角比卡片小导致卡片的圆角还露出一节了
+
+即：(1) 统一后的 3dp 环比原来「白色那一族」的宽度粗，要求回到 1.5dp；
+(2) 卡片焦点环在圆角处与卡片自身圆角不匹配，卡片圆角露出环外侧一段。
+
+### 12.2 根因（像素级硬证据）
+
+宽度：`@dimen/webhtv_focus_ring_width` 首版取 3dp，来自 `selector_video_item`（**视频层**）的
+3dp 字面量；§9 把它套到**应用表面**后，首页全部环从原来的 1.5dp 变为 3dp。dev1 实机
+（1920x1080 / `wm density`=280，应用内有效缩放 ≈2.35px/dp）量到环带 7.06px = 3dp，
+而修复前同一位置是 3.5px ≈ 1.5dp。
+
+圆角：`shape_vod_focused` 是卡片的 **foreground**，卡片的可见表面另有自己的 8dp 圆角
+（`@style/Vod.Grid` 图片上圆角 / `shape_vod_name` 标题块下圆角 / `shape_vod_list` 列表四角）。
+描边型 `<shape>`（`GradientDrawable`）把描边中心线画在「内缩 w/2、但圆角半径仍取声明值」的
+路径上（Robolectric 栅格化扫描确认），于是：
+
+| 量 | 取值 |
+| --- | --- |
+| 环外边界圆角半径 | 声明值 + w/2 = 8 + 1.5 = **9.5dp** |
+| 卡片表面圆角半径 | **8dp**（`Vod.Grid` / `shape_vod_name` / `shape_vod_list`） |
+| 实机量到的环外弧 | ≈21.2px ÷ 2.35 ≈ **9dp** |
+| 实机量到的卡片弧 | ≈13.5px ÷ 2.35 ≈ **5.7dp**（同一张 m1.png 截图） |
+
+环外弧比卡片弧大 ⇒ 沿角落对角线卡片弧更靠外，露出 1–2px 月牙（实机 RGB 复核：
+`y=238` 行蓝色止于 x=396，而 x=397 是米色 `221,207,194`，卡片平边在 396.5px；
+`y=244` 行 x=402 同样是米色 `200,186,186`）。这正是用户所说「卡片的圆角还露出一节」。
+
+### 12.3 修法
+
+1. `webhtv_focus_ring_width`：3dp → **1.5dp**（= §9 统一前「白色那一族」的实机宽度，
+   也是用户认可的那种宽度）。视频层/固定明暗宿主仍是 `selector_video_item` 的 3dp/2dp/1dp
+   自成一套档位，与本次改动无关。
+2. `shape_vod_focused` 声明圆角：8dp → **7dp**。理论值 = 宿主圆角 − w/2 = 7.25dp，但描边宽度
+   按整数像素向上取整（1.5dp @ density 3 = 4.5px → 5px，实际 w/2 = 2.5px），写满 7.25dp 时
+   在部分密度下仍会超出宿主弧 0.25–0.5px；7dp 在 density 1.5/2/3/4 下的实测溢出为
+   0（density 2 下仅剩半像素平局：5px，已在测试里设每角 2px 的亚像素容差）。
+   `selector_vod` 的 6 个宿主可见表面都是 8dp，所以单一环仍能同时对齐全部宿主。
+
+### 12.4 新增不变量
+
+| 测试 | 断言 |
+| --- | --- |
+| `TvAppSurfaceFocusRingDeviceTest.cardRingOuterBoundaryContainsEveryCardSurfacePixel` | 真实 `selector_vod` 焦点分支与 8dp 卡片表面栅格化后，**卡片 0 像素**落在环外边界之外（主档密度 xxhdpi 严格 0；其余档位允许每角 2px 亚像素平局）；覆盖 hdpi/xhdpi/xxhdpi/xxxhdpi 四档密度 |
+| `TvAppSurfaceFocusRingDeviceTest.theCornerMeasurementCatchesTheReportedCardCornerBleed` | 变异检验：把用户报告时的旧取值（声明 8dp + 3dp 环宽）搭回来，上面的度量必须报出溢出 |
+| `TvFocusRingContractTest.cardRingCornerRadiusIsTheHostRadiusMinusHalfTheRingWidth` | 卡片环声明圆角 ≤ `宿主圆角 − w/2`，且不低于该理论值 0.5dp；6 个宿主表面圆角必须相同 |
+| `TvFocusRingContractTest.thereIsExactlyOneFocusRingWidthInTheTvUi` | token 只声明一次（不再钉死具体 dp 值，避免每次宽度调整都要改断言） |
+
+栅格化扫描（Robolectric `GraphicsMode.NATIVE`，240×240，卡片溢出像素数）：
+
+| 声明圆角 | hdpi(1.5) | xhdpi(2) | xxhdpi(3) | xxxhdpi(4) |
+| --- | --- | --- | --- | --- |
+| 8dp（旧） | 25 | 52 | 114 | 181 |
+| 7.25dp（纯理论值） | 0 | 2 | 3 | 2 |
+| **7dp（采纳）** | **0** | **0** | **0** | **0** |
+| 8dp + 3dp（用户报告的旧组合） | 62 | 91 | 205 | 379 |
+
+### 12.5 本轮验证证据
+
+| 检查 | 结果 |
+| --- | --- |
+| `TvAppSurfaceFocusRingDeviceTest` | 8/8 |
+| `TvFocusRingContractTest` | 12/12 |
+| `:app:testLeanbackArm64_v8aDebugUnitTest` | 4158 tests / 0 failures |
+| `:app:testMobileArm64_v8aDebugUnitTest` | 4980 tests / 0 failures |
+| `scripts/check_ui_tokens.sh` | `violations=1`（= 基线）、`hex_drawables=0`、`contrast failures=0` |
+| 全库焦点态描边宽度扫描 | 仍只剩已豁免的 `selector_video_item` 与 `shape_audio_action_icon_focused` |
+
+实机复核（dev1 `192.168.50.3:5555`，1920x1080 / `wm density`=280；用
+`scripts/build_arm64_debug_install.sh --flavor leanback` **覆盖安装**同签名 Debug 包，未卸载）：
+
+| 量 | 修复前 | 修复后 |
+| --- | --- | --- |
+| 首页功能按钮环带宽度（精确 #0B57D0 像素游程） | 6px | **3px** |
+| 首页内容卡片环带宽度（同一度量） | 6px | **3px** |
+| 两族环色 | 已统一 | 已统一（实测像素 `(11,87,208)` = 主题 FOCUS 槽） |
+| 卡片圆角外侧「无法用 环色↔壁纸 混合解释」的像素数 | **25** | **0** |
+| 卡片环总像素（同屏同状态） | 11447 | 5789 |
+
+最后一行就是用户说的「卡片的圆角还露出一节」的量化定义：修复前那里是 `(222,209,195)`
+`(221,207,194)` 这类米色（卡片表面色）像素，修复后同一位置的像素全部是环色→壁纸的
+抗锯齿过渡。逐像素放大图（16×）已人工比对：修复前蓝色弧外侧有一条米色月牙，修复后弧外侧
+直接过渡到壁纸。
+
+已知取舍：WCAG 2.2 SC 2.4.13 的「至少 2 CSS px 周长」要求需要密度 ≥1.5（1.5dp × 1.5 = 2.25px）；
+电视端实际密度 1.5–3.5，dev1 上实测环带 3px，满足门槛。若以后出现 1x 密度的电视机型，
+需要重新评估而不是把 token 调粗（先看实机可读性）。
+
+### 12.6 回滚
+
+只改一个 dimen 取值与一个 drawable 的 `corners` 属性：把 `webhtv_focus_ring_width` 改回 `3dp`、
+`shape_vod_focused` 的 `android:radius` 改回 `8dp` 即回到 §11 的状态（本轮两个新测试会同时转红，
+正好是判据）。两条注释性 prose 与本文档属于记录，不需要回滚。

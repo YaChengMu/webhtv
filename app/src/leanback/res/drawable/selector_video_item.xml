@@ -2,7 +2,8 @@
 <!--
     原生增强播放页「文本按钮/芯片」的统一外观：线路、分段(分组)、清晰度、选集文本、播放模式等。
 
-    统一规范（与卡片类 selector_*_card 一致）：
+    统一规范（与卡片类 selector_*_card 一致；注意这是**视频层**档位，与应用表面 token
+    @dimen/webhtv_focus_ring_width（1.5dp，见 docs 焦点环规范 §12）分属不同语义，不要求同值）：
     - 获得焦点：3dp ?attr/tvFocusRing
     - 当前播放/当前生效：2dp ?attr/tvCurrentRing
     - 常态：1dp ?attr/tvNormalStroke

@@ -2,7 +2,7 @@
 <!--
     电视版「视频层」播放器画面容器的焦点环（VideoActivity 的 @+id/video 画面框）。
 
-    只统一宽度：@dimen/webhtv_focus_ring_width（3dp，此前是 1.5dp）。环色保持与调色板无关的
+    只统一宽度：@dimen/webhtv_focus_ring_width（此前是 1.5dp）。环色保持与调色板无关的
     白色，理由同 shape_chip_focused.xml：该控件叠在视频画面上，浅色表的 FOCUS 槽（深蓝）
     在视频/玻璃控制层上没有可用对比度，白色才是可见的。这是仓库既有契约
     （docs/TV-FOCUS-RING-20261004-unified-theme-ring.md 非目标一节）明确保留的一层。

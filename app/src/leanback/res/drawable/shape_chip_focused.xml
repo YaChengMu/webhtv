@@ -3,8 +3,8 @@
     电视版「视频层」方角芯片（播放页解析线路 chip，宿主 view_control_vod.xml 是叠加在视频画面
     上的透明控制条）的统一焦点环。
 
-    这里只统一**宽度**（@dimen/webhtv_focus_ring_width，3dp；此前是 1.5dp，与同一播放页
-    其它芯片的 3dp 不一致），环色刻意保持与调色板无关的白色。
+    这里只统一**宽度**（@dimen/webhtv_focus_ring_width；此前写死 1.5dp，与同一播放页
+    其它芯片写死的 3dp 不一致），环色刻意保持与调色板无关的白色。
 
     理由（与 shape_chip_round_focused.xml 同一判据）：该控件直接叠在视频画面上，宿主背景是
     {@code @color/transparent}，没有任何调色板表面可以保证对比度。若改取 ?attr/tvFocusRing，

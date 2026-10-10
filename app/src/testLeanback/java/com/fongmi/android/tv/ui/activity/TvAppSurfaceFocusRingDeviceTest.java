@@ -97,12 +97,11 @@ public class TvAppSurfaceFocusRingDeviceTest {
 
     /** 把 focused 分支栅格化。 */
     private static Bitmap render(Context context, int resId) {
-        Drawable drawable = focusedDrawable(context, resId);
-        Bitmap bitmap = Bitmap.createBitmap(SIZE, SIZE, Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(bitmap);
-        drawable.setBounds(0, 0, SIZE, SIZE);
-        drawable.draw(canvas);
-        return bitmap;
+        return render(context, resId, SIZE);
+    }
+
+    private static Bitmap render(Context context, int resId, int size) {
+        return rasterize(focusedDrawable(context, resId), size);
     }
 
     /**
@@ -270,5 +269,166 @@ public class TvAppSurfaceFocusRingDeviceTest {
         shape.setBounds(0, 0, SIZE, SIZE);
         shape.draw(canvas);
         return bitmap;
+    }
+
+    // ------------------------------------------------------------ R4 卡片环圆角对齐卡片自身圆角
+
+    /**
+     * 卡片宿主的可见表面圆角：{@code @style/Vod.Grid}（图片上圆角）、{@code shape_vod_name}
+     * （标题块下圆角）、{@code shape_vod_list}（列表型宿主四角）都是一律 8dp。
+     */
+    private static final float CARD_SURFACE_RADIUS_DP = 8f;
+
+    /** 角落几何用的栅格尺寸：密度 3 下为 80dp，四条边都远离角落弧，不会被裁掉。 */
+    private static final int CORNER_SIZE = 240;
+
+    /** 电视端主档密度：要求严格 0 溢出，最接近 dev1 实机（`wm density`=280 → 2.35px/dp）。 */
+    private static final String TV_PRIMARY_DENSITY = "xxhdpi";
+
+    /** 其余密度的亚像素容差：每角最多 2px；用户报告的缺陷特征 ≥25px，不会漏过。 */
+    private static final int SUBPIXEL_LEAK_TOLERANCE_PX = 8;
+
+    /**
+     * 用户报告（2026-10-10 dev1 实机）：「边框在卡片上的圆角部分匹配不完美，感觉是圆角比卡片小，
+     * 导致卡片的圆角还露出一节了」。
+     *
+     * <p>实机像素复核（1920x1080 / 密度 280，应用内有效缩放 ≈ 2.35px/dp）量到：卡片表面右边界
+     * 396.5px、环外边界 403.46px（环带 7.06px = 3dp），而环的 <b>外边界圆角弧</b>半径 ≈ 21.2px
+     * ≈ 9dp = 声明 8dp + w/2；卡片自身弧半径 8dp。两者中心都在角上 8–9.5dp 处，沿对角线卡片
+     * 弧反而更靠外 1.03px，也就是实机上那 1–2px 米色月牙。栅格化扫描（density 1/1.75/2/2.353/3/4）
+     * 也复现了同一个方向：声明 8dp 时卡片溢出高数十倍于修复后。
+     *
+     * <p>本测试不看 XML，直接把真实 {@code selector_vod} 焦点分支与卡片表面栅格化后逐像素验证：
+     * 卡片不能有任何像素落在环的 <b>外边界之外</b>。断言覆盖电视端实际存在的四档密度
+     * （hdpi/xhdpi/xxhdpi/xxxhdpi），因为描边宽度是按整数像素向上取整的，同一 dp 取值在不同
+     * 密度下取整结果不同。栅格化扫描实测卡片溢出像素：声明 8dp 在四档下为 25/52/114/181，
+     * 声明 7dp 在 1.5/2/3/4 四档下为 0（含全量套件下的重跑）。
+     *
+     * <p>容差：主档密度（xxhdpi，与 dev1 实机 ~2.35px/dp 最接近的档位）要求**严格 0**；
+     * 其余密度允许每角最多 2px 的亚像素平局（实测 xhdpi 下 5px）——卡片的 16px 弧与环外边界
+     * 的 15.5px 弧只差半个像素，栅格化在切线处会把这一点点像素判给任一侧；而用户报告的缺陷
+     * 特征是最少 25px，所以这个容差不会让缺陷漏过（变异检验会验证这一点）。
+     *
+     * <p>密度限定符必须用**绝对**写法（{@code "xhdpi"} 而不是 {@code "+xhdpi"}）：
+     * {@code RuntimeEnvironment.setQualifiers("+xhdpi")} 是「在现有限定符上追加」，
+     * 全量套件里前面别的测试类留下的密度限定符会一起参与解析，使实际密度不确定。
+     *
+     * <p>说明：真实卡片轮廓是四角 8dp 的圆角矩形（顶部来自图片、底部来自标题块，列表型宿主
+     * 四角同圆角），所以这里用统一 8dp 的圆角矩形当卡片表面；单环覆盖全部宿主的前提由
+     * {@code TvFocusRingContractTest.cardRingCornerRadiusIsTheHostRadiusMinusHalfTheRingWidth} 钉住。
+     */
+    @Test
+    public void cardRingOuterBoundaryContainsEveryCardSurfacePixel() {
+        for (String density : new String[]{"hdpi", "xhdpi", "xxhdpi", "xxxhdpi"}) {
+            RuntimeEnvironment.setQualifiers(density);
+            Context context = themedContext();
+            int outside = cardPixelsOutsideRing(
+                    render(context, CARD_SELECTOR, CORNER_SIZE),
+                    cardSurface(context, CARD_SURFACE_RADIUS_DP));
+            String where = "（限定符 " + density + "，实际密度 "
+                    + context.getResources().getDisplayMetrics().density + "）";
+            if (TV_PRIMARY_DENSITY.equals(density)) {
+                assertEquals("卡片表面不允许有任何像素落在焦点环外边界之外" + where
+                                + "——这正是用户报告的「卡片的圆角还露出一节」，声明圆角必须取 宿主圆角 - 环宽/2",
+                        0, outside);
+            } else {
+                assertTrue("卡片溢出 " + outside + "px 必须落在亚像素上限 " + SUBPIXEL_LEAK_TOLERANCE_PX
+                                + "px 内" + where, outside <= SUBPIXEL_LEAK_TOLERANCE_PX);
+            }
+        }
+    }
+
+    /**
+     * 变异检验：把用户报告时的旧取值（声明 8dp + 3dp 环宽）搭回来，上面的度量必须能抓到卡片
+     * 圆角溢出，否则 {@code cardRingOuterBoundaryContainsEveryCardSurfacePixel} 就是空断言。
+     */
+    @Test
+    public void theCornerMeasurementCatchesTheReportedCardCornerBleed() {
+        RuntimeEnvironment.setQualifiers("xxhdpi");
+        Context context = themedContext();
+
+        int outside = cardPixelsOutsideRing(
+                renderLegacyCardRing(context, 8f, 3f),
+                cardSurface(context, CARD_SURFACE_RADIUS_DP));
+
+        assertTrue("度量方法必须能抓到「环外边界圆角大于卡片圆角」时卡片露出的月牙"
+                        + "（实测落在环外的卡片像素 = " + outside + "px）",
+                outside > 0);
+    }
+
+    /** 栅格化一张卡片表面：统一圆角的圆角矩形（几何与 ShapeableImageView 的 8dp 轮廓等价）。 */
+    private static Bitmap cardSurface(Context context, float radiusDp) {
+        float density = context.getResources().getDisplayMetrics().density;
+        android.graphics.drawable.GradientDrawable surface = new android.graphics.drawable.GradientDrawable();
+        surface.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        surface.setCornerRadius(radiusDp * density);
+        surface.setColor(0xFFF3E7D9);
+        return rasterize(surface, CORNER_SIZE);
+    }
+
+    /** 用户报告时的旧卡片环：声明圆角 8dp（= 宿主圆角，没减 w/2）、环宽 3dp。 */
+    private static Bitmap renderLegacyCardRing(Context context, float radiusDp, float widthDp) {
+        float density = context.getResources().getDisplayMetrics().density;
+        android.graphics.drawable.GradientDrawable ring = new android.graphics.drawable.GradientDrawable();
+        ring.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        ring.setCornerRadius(radiusDp * density);
+        ring.setStroke(Math.round(widthDp * density), focusSlot(context));
+        return rasterize(ring, CORNER_SIZE);
+    }
+
+    private static Bitmap rasterize(Drawable drawable, int size) {
+        Bitmap bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        drawable.setBounds(0, 0, size, size);
+        drawable.draw(canvas);
+        return bitmap;
+    }
+
+    /**
+     * 数出有多少卡片像素落在环的 <b>外边界之外</b>。做法：从图像四边向内扩散所有「非环」像素，
+     * 扩散得到的就是环外侧的区域（环内部被不透明环带封住，扩散不进去）。
+     */
+    private static int cardPixelsOutsideRing(Bitmap ring, Bitmap card) {
+        int total = CORNER_SIZE * CORNER_SIZE;
+        boolean[] cardPixel = new boolean[total];
+        boolean[] ringPixel = new boolean[total];
+        boolean[] outside = new boolean[total];
+        int[] queue = new int[total];
+        int head = 0;
+        int tail = 0;
+
+        for (int y = 0; y < CORNER_SIZE; y++) {
+            for (int x = 0; x < CORNER_SIZE; x++) {
+                int at = y * CORNER_SIZE + x;
+                ringPixel[at] = alpha(ring, x, y) >= OPAQUE;
+                cardPixel[at] = alpha(card, x, y) >= OPAQUE;
+                boolean border = x == 0 || y == 0 || x == CORNER_SIZE - 1 || y == CORNER_SIZE - 1;
+                if (border && !ringPixel[at] && !outside[at]) {
+                    outside[at] = true;
+                    queue[tail++] = at;
+                }
+            }
+        }
+
+        while (head < tail) {
+            int at = queue[head++];
+            int x = at % CORNER_SIZE;
+            int y = at / CORNER_SIZE;
+            for (int[] step : new int[][]{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}) {
+                int nx = x + step[0];
+                int ny = y + step[1];
+                if (nx < 0 || ny < 0 || nx >= CORNER_SIZE || ny >= CORNER_SIZE) continue;
+                int next = ny * CORNER_SIZE + nx;
+                if (ringPixel[next] || outside[next]) continue;
+                outside[next] = true;
+                queue[tail++] = next;
+            }
+        }
+
+        int leaked = 0;
+        for (int at = 0; at < total; at++) {
+            if (cardPixel[at] && outside[at]) leaked++;
+        }
+        return leaked;
     }
 }

@@ -3,8 +3,8 @@
     电视版「固定深色宿主」圆角芯片（直播源管理弹窗 LiveDialog 的玻璃面板行、
     崩溃页/密码弹窗按钮）的统一焦点环。
 
-    环宽唯一来源：@dimen/webhtv_focus_ring_width（3dp）——此前这里是 1.5dp，
-    与应用内其余焦点环的 3dp 不一致，正是用户报告「边框粗细也貌似不一样」的一族。
+    环宽唯一来源：@dimen/webhtv_focus_ring_width——此前这里是 1.5dp，
+    与应用内其余焦点环写死的取值（2dp/3dp）不一致，正是用户报告「边框粗细也貌似不一样」的一族。
 
     环色刻意保持与调色板无关的白色（而不是 ?attr/tvFocusRing）：本 drawable 的主要宿主
     dialog_live 面板是 shape_dialog_glass_panel（固定深靛玻璃渐变，两张表里都是深色），

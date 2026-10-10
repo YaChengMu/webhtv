@@ -2,7 +2,7 @@
 <!--
     电视版退出确认弹窗「主按钮」（dialog_exit_confirm，HomeActivity 退出确认）的焦点态。
 
-    只统一**宽度**：@dimen/webhtv_focus_ring_width（3dp，此前写死 2dp），
+    只统一**宽度**：@dimen/webhtv_focus_ring_width（此前写死 2dp），
     与电视端其余焦点环一致，消除「边框粗细也貌似不一样」。
 
     环色与填充刻意保持与调色板无关的字面量，不改成 ?attr/colorPrimary：
