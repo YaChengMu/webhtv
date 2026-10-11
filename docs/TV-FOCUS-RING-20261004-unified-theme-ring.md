@@ -936,3 +936,83 @@ TV 默认深色后必然显形。改为与填充配对的 `webhtv_color_on_prima
 - 深色焦点环：`values-night/webhtv_tokens.xml` 与 `ThemeTokens.dark()` 改回 `#A8C7FA`。
 - 加载指示器：两个 `view_progress.xml` 改回 `?attr/colorPrimary`。
 - 追更页文本：两个 `following_button_*_text.xml` 改回 `@android:color/white`。
+
+## 18. 追加：播放页只留一种高亮色（宿主分层修正 + 深色表视频层环取近白）（2026-10-11）
+
+### 18.1 用户原始要求
+
+> 播放页 \[两张实机截图\] 存在多个不同颜色的高亮效果
+
+截图 1（手机版详情页）：「个性推荐 · TMDB」卡片获得焦点时是**近白环**；
+截图 2（电视版播放页）：「1-10」分段芯片获得焦点时是**灰蓝环**，而同一页其它元素是近白环。
+
+### 18.2 根因（像素级硬证据）
+
+| 环来源 | 深色表取值 | 消费者 |
+| --- | --- | --- |
+| `?attr/tvFocusRing`（应用表面） | `#F5F7FF` | 首页卡片、详情页选集卡、演员卡、剧照卡 |
+| `?attr/tvPlayerRing`（视频层） | `#7695C5` | 控制条芯片、控制面板按钮、画面框、字幕/直播环、**`selector_video_item`** |
+
+`selector_video_item` 同时被两类宿主使用，却整批归到了视频层：
+播放页内容区（`@+id/scroll` 里的线路/清晰度/数组分段/分段/选集/快捷源芯片，以及
+简介/短显/搜索/收藏按钮行、集数表头）实际画在**页面背景**上，与 `selector_episode_card`
+同类；只有两处固定深色玻璃对话框（`dialog_episode_list` / `dialog_quick_search`）复用同一批
+芯片布局，才是真正的玻璃宿主。
+
+实机复核（dev1 `192.168.50.3:5555`，深色表）：
+
+```text
+「1-10」分段芯片焦点环 = #7695C5（灰蓝，与截图 2 逐像素一致）
+```
+
+### 18.3 决策（A + C 组合）
+
+- **A：按宿主分层修正归类。** `selector_video_item` 归回「应用表面」族
+  （`?attr/tvFocusRing` / `?attr/tvCurrentRing`）；两处固定玻璃对话框用
+  `@style/ThemeOverlay.WebHTV.GlassFocusRings` 在**宿主子树内**把这两项重绑回视频层派生色，
+  因此仍然只有一份 drawable、不需要给共享布局复制副本。
+- **C：深色表的视频层环取与应用表面同值的近白。** 深色表两类宿主的底色都是深色
+  （深色 surface、固定玻璃、多数视频画面），没有任何可读性理由保留第二种高亮色。
+  浅色表**必须保留**派生夹取：浅色 FOCUS 深蓝 `#0B57D0` 画在固定玻璃上只有 1.83:1。
+- 纯白视频（雪/白墙）从 `ThemeResolver.PLAYER_RING_BACKDROPS` 移除：把它当作约束背景，
+  正是把深色表环压成 `#7695C5` 的原因。代价是亮场景视频上的近白环对比度不足，
+  但该场景只在焦点落在画面框/播控条时出现，而绝大多数视频层宿主的局部底色是深玻璃。
+
+### 18.4 变更清单
+
+| 文件 | 变更 |
+| --- | --- |
+| `leanback/res/drawable/selector_video_item.xml` | 焦点/当前态环 → `?attr/tvFocusRing` / `?attr/tvCurrentRing` |
+| `leanback/res/values/styles.xml` | 新增 `ThemeOverlay.WebHTV.GlassFocusRings` |
+| `leanback/res/layout/dialog_episode_list.xml`、`dialog_quick_search.xml` | 根上应用该覆盖层 |
+| `values-night/webhtv_tokens.xml`、`ThemeTokens.dark()` | `webhtv_color_player_focus_ring` `#7695C5` → `#F5F7FF` |
+| `ThemeResolver.PLAYER_RING_BACKDROPS` | 去掉纯白视频，只保留三档固定玻璃 |
+| 环色注释（`colors.xml`、`webhtv_tokens.xml`、`shape_chip_*`、`selector_control_sheet_button`、`shape_video_focused`） | 改写为新的分层与取舍说明 |
+
+### 18.5 新增/更新的契约测试
+
+- `TvFocusRingContractTest.playerFocusRingsShareOneWidthAndAThemeControlledColour`：
+  视频层族名单移除 `selector_video_item`，新增应用表面族断言、覆盖层存在性断言、
+  两处玻璃对话框必须应用覆盖层的断言，以及「芯片不得再出现视频层环色」的反向断言。
+- `TvFocusRingContractTest.playerRingColoursClearNonTextContrastOnGlassBackdrops`：
+  背景集合改为三档玻璃，期望值深色表为 `#F5F7FF`；保留「浅色 FOCUS 深蓝对玻璃不可读」的回归钉子。
+- `TvFocusRingContractTest.playerRingColoursStayOneUnifiedHighlightInTheDarkTable`（新）：
+  深色表视频层环必须**等于**应用表面焦点环、浅色表必须**不等**，且两张表都要与 frozen 色板同值。
+- `NativeEnhancedPlaybackStyleFocusTest`、`VideoActivityLayoutTest`：芯片期望由视频层族改为应用表面族。
+
+### 18.6 本轮验证证据
+
+| 检查 | 结果 |
+| --- | --- |
+| `:app:testLeanbackArm64_v8aDebugUnitTest --tests TvFocusRingContractTest`、`NativeEnhancedPlaybackStyleFocusTest` | 通过 |
+| `:app:testMobileArm64_v8aDebugUnitTest --tests VideoActivityLayoutTest` | 通过 |
+| `:app:testLeanbackArm64_v8aDebugUnitTest --tests "com.fongmi.android.tv.theme.*"`（含 51 色 XML/色板一致性） | 通过 |
+| Robolectric 一次性探针（验证用，未入库）：白天表 | 普通上下文 `?attr/tvFocusRing` = `#FF0B57D0`；玻璃对话框子树内 = `#FF447BF5`；对话框内芯片栅格化描边 = `#FF447BF5`；页面内容区芯片 = `#FF0B57D0` |
+| dev1 实机（深色表，覆盖安装同签名 Debug 包） | 数组分段芯片「1-16」焦点环 `#F5F7FF`（该区域 `#7695C5` 像素数 **0**）；选集芯片「第09集」焦点环 `#F5F7FF`；当前生效分段环 `#2CC56F`；视频画面框环 `#F5F7FF` |
+
+### 18.7 回滚
+
+- 芯片分层：`selector_video_item.xml` 两处环属性改回 `?attr/tvPlayerRing` / `?attr/tvPlayerCurrentRing`，
+  并删除两处 `android:theme="@style/ThemeOverlay.WebHTV.GlassFocusRings"` 与该 style。
+- 深色表近白：`values-night/webhtv_tokens.xml` 与 `ThemeTokens.dark()` 改回 `#7695C5`，
+  并把 `0xFFFFFFFF` 加回 `ThemeResolver.PLAYER_RING_BACKDROPS`。

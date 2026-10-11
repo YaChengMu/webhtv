@@ -105,6 +105,8 @@ public record ThemeTokens(
             0xFF000000,
             0xFF0B57D0,
             1.0f,
+            // 浅色表视频层环：FOCUS 深蓝在固定深箭玻璃上仅 1.83:1，
+            // 取 ThemeResolver 夹取到 ≥3:1 的派生值（与 values/webhtv_tokens.xml 同步）。
             0xFF447BF5,
             0xFF00A95A,
             1.0f,
@@ -163,7 +165,9 @@ public record ThemeTokens(
             0xFF000000,
             0xFFF5F7FF,
             1.1f,
-            0xFF7695C5,
+            // 深色表视频层环 = 应用表面焦点环（近白）：深玻璃/深色画面都可读，
+            // 因此播放页只有一种高亮色。浅色表仍为固定玻璃上的派生夹取值。
+            0xFFF5F7FF,
             0xFF00A95A,
             1.0f,
             0xFFFFFFFF,

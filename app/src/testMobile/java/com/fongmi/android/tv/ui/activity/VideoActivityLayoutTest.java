@@ -1499,10 +1499,13 @@ public class VideoActivityLayoutTest {
                 && source.contains("mArrayAdapter.setSelectedPosition(position);")
                 && arrayAdapter.contains("setActivated(position == selectedPosition)")
                 && segmentSelector.contains("android:state_activated=\"true\"")
-                // 当前生效态的颜色已收敛到视频层统一语义 token：
-                // 2026-10-10 第三轮从 ?attr/tvCurrentRing 改为 ?attr/tvPlayerCurrentRing
-                // （播放页控制条直接叠在视频上，需要两类极端背景可读性夹取后的派生色）。
-                && segmentSelector.contains("android:color=\"?attr/tvPlayerCurrentRing\""));
+                // 当前生效态的颜色收敛到**应用表面**统一语义 token：
+                // 2026-10-10 第三轮曾改为 ?attr/tvPlayerCurrentRing（当芯片当视频层宿主）；
+                // 2026-10-11 经实机复核修正宿主分层——分段落芯片叠在页面内容区（@+id/scroll）
+                // 而不是视频/固定玻璃上，所以回到 ?attr/tvCurrentRing，
+                // 与选集卡片（selector_episode_card）同一族；固定玻璃对话框由
+                // ThemeOverlay.WebHTV.GlassFocusRings 在子树内重绑回视频层派生色。
+                && segmentSelector.contains("android:color=\"?attr/tvCurrentRing\""));
     }
 
     @Test

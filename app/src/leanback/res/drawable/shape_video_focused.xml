@@ -2,9 +2,10 @@
 <!--
     电视版「视频层」播放器画面容器的焦点环（VideoActivity 的 @+id/video 画面框）。
 
-    宽度：@dimen/webhtv_focus_ring_width。环色保持与调色板无关的白色，理由同
-    shape_chip_focused.xml：该控件叠在视频画面上，浅色表的 FOCUS 槽（深蓝）在视频/玻璃
-    控制层上没有可用对比度，白色才是可见的。这是仓库既有契约
+    宽度：@dimen/webhtv_focus_ring_width。环色取 ?attr/tvPlayerRing（叠在视频/固定玻璃上的
+    控件族）：该控件是播放页的视频画面框，浅色表的 FOCUS 槽（深蓝）在视频/玻璃控制层上
+    没有可用对比度，所以取浅色表在固定玻璃上夹取出来的派生色；深色表则取与应用表面焦点环
+    同值的近白（与历史上写死的白色一致）。这是仓库既有契约
     （docs/TV-FOCUS-RING-20261004-unified-theme-ring.md 非目标一节）明确保留的一层。
 
     圆角 0dp（= 宿主圆角 − w/2，下限 0）：宿主是一个普通 FrameLayout（400dp x 225dp，

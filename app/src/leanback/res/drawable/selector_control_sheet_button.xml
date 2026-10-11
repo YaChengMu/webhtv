@@ -11,8 +11,8 @@
     于是播放页里同时存在白环（本族）与主题蓝环（selector_video_item）、绿环（当前态），
     用户报告「按钮和播放器选中后的边框颜色也不统一」。本控件叠在播放页固定深箭玻璃面板
     （shape_dialog_control_glass_panel）上，浅色表 FOCUS 深蓝在它上面只有 1.83:1，
-    所以不能用 ?attr/tvFocusRing；tvPlayerRing 是 ThemeResolver 在「视频亮场景 + 固定玻璃」
-    两类极端背景上夹取到 ≥3:1 的派生色，既跟随主题又始终可见。
+    所以不能用 ?attr/tvFocusRing；tvPlayerRing 是浅色表在固定玻璃上夹取到 ≥3:1 的派生色，
+    深色表则与应用表面焦点环同值（近白），既跟随主题又始终可见。
     半透明层次（pressed/focused/selected 的 alpha 差异）保留，只把色相换成主题派生色。
 -->
 <ripple xmlns:android="http://schemas.android.com/apk/res/android"

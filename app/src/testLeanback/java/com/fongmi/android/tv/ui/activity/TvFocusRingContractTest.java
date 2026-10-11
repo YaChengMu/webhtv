@@ -1,5 +1,7 @@
 package com.fongmi.android.tv.ui.activity;
 
+import com.fongmi.android.tv.theme.ThemeTokens;
+
 import org.junit.Test;
 
 import java.nio.charset.StandardCharsets;
@@ -8,6 +10,7 @@ import java.nio.file.Path;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -476,25 +479,32 @@ public class TvFocusRingContractTest {
      * {@code selector_video_item}（11 个文本按钮）走 3dp {@code ?attr/tvFocusRing}，
      * 而「当前播放」走 2dp 写死绿 {@code #2CC56F}；同一屏上三种宽度、三种颜色。
      *
-     * <p>本测试把播放页（视频层）的两个不变量钉死：
+     * <p>本测试把播放页的两族环钉死（宿主分层：谁叠在视频/固定玻璃上，谁在页面背景上）：
      * <ol>
      *   <li>所有播放页焦点/当前态环的宽度都引用 {@code @dimen/webhtv_focus_ring_width}；</li>
-     *   <li>环色都走视频层主题属性 {@code ?attr/tvPlayerRing} / {@code ?attr/tvPlayerCurrentRing}，
-     *       不得再写死白色或绿色。</li>
+     *   <li><b>视频层族</b>（控制条芯片、控制面板按钮、画面框、字幕/直播环）走
+     *       {@code ?attr/tvPlayerRing} / {@code ?attr/tvPlayerCurrentRing}；</li>
+     *   <li><b>应用表面族</b>（{@code selector_video_item}：简介/短显/搜索按钮行、集数表头、
+     *       线路/清晰度/数组分段/分段/选集/快捷源芯片）走 {@code ?attr/tvFocusRing} /
+     *       {@code ?attr/tvCurrentRing}，因为它们画在页面背景上而不是视频/玻璃上；</li>
+     *   <li>复用这批芯片布局的两处固定玻璃对话框在子树内用
+     *       {@code ThemeOverlay.WebHTV.GlassFocusRings} 把两项重绑回玻璃可读色。</li>
      * </ol>
      *
-     * <p><b>为什么播放页不能直接用 {@code ?attr/tvFocusRing}</b>：控制条**直接叠在视频上**，
-     * 最坏背景是视频亮场景（纯白）；而控制面板又是固定深箭玻璃。实测白环对纯白视频
-     * 1.00:1、浅色表 FOCUS 深蓝对玻璃 1.83:1——没有任何调色板原色能同时在两类背景上可见。
-     * 所以 {@code tvPlayerRing} 取的是 {@code ThemeResolver} 用 {@code readableAccent} 在
-     * 「纯白视频 + 三档玻璃」上夹取到 ≥3:1（WCAG 2.2 SC 1.4.11 非文本门槛）后的派生色，
-     * 保持用户 FOCUS / playerCurrent 槽的色相与彩度、只走明度。
+     * <p><b>为什么视频层族不能用 {@code ?attr/tvFocusRing}</b>：控制条/控制面板是固定深靛
+     * 玻璃（{@code #E62F315E→#CC303463}，两张表里都是深色），浅色表 FOCUS 深蓝
+     * {@code #0B57D0} 画在它上面只有 1.83:1（dev1 实机实测）。所以 {@code tvPlayerRing}
+     * 在**浅色表**是 {@code ThemeResolver} 用 {@code readableAccent} 在三档玻璃上夹取到
+     * ≥3:1（WCAG 2.2 SC 1.4.11 非文本门槛）后的派生色，保持用户 FOCUS / playerCurrent 槽
+     * 的色相与彩度、只走明度；<b>深色表</b>两类宿主的底色都是深色，因此直接取与应用表面
+     * 焦点环同值的近白——否则同一页会同时出现「应用表面近白 + 视频层灰蓝」两种高亮
+     * （用户报告 2026-10-11「播放页存在多个不同颜色的高亮效果」）。
      */
     @Test
     public void playerFocusRingsShareOneWidthAndAThemeControlledColour() throws Exception {
         // {文件, 必须出现的环色属性}
+        // 视频层族：宿主是叠在视频画面或固定深色玻璃上的控件。
         String[][] rings = {
-                {"selector_video_item.xml", "?attr/tvPlayerRing"},
                 {"shape_chip_focused.xml", "?attr/tvPlayerRing"},
                 {"shape_chip_round_focused.xml", "?attr/tvPlayerRing"},
                 {"shape_video_focused.xml", "?attr/tvPlayerRing"},
@@ -513,12 +523,47 @@ public class TvFocusRingContractTest {
                     body.contains("android:color=\"@color/white\"") || body.contains("android:color=\"#FFFFFF\""));
         }
 
-        // 「当前播放/当前生效」态：统一宽度 + 独立的 tvPlayerCurrentRing（不再是写死绿）。
-        for (String name : new String[]{"selector_video_item.xml", "selector_control_sheet_button.xml",
+        // 应用表面族：selector_video_item 的宿主是播放页内容区的按钮/芯片（简介/短显/搜索
+        // 按钮行、集数表头、线路/清晰度/数组分段/分段/选集/快捷源行），它们画在页面背景上，
+        // 不是叠在视频或固定玻璃上——2026-10-11 用户报告「播放页存在多个不同颜色的高亮效果」，
+        // 这批芯片此前错用了视频层灰蓝环（#7695C5），现已归到调色板 FOCUS 槽。
+        String chip = values(read(LEANBACK_DRAWABLE + "selector_video_item.xml"));
+        assertTrue(LEANBACK_DRAWABLE + "selector_video_item.xml 的焦点环必须走应用表面属性 ?attr/tvFocusRing",
+                chip.contains("?attr/tvFocusRing"));
+        assertTrue(LEANBACK_DRAWABLE + "selector_video_item.xml 的当前态环必须走应用表面属性 ?attr/tvCurrentRing",
+                chip.contains("?attr/tvCurrentRing"));
+        assertFalse("播放页内容区芯片不允许再用视频层环色（会造成同页两种高亮色）",
+                chip.contains("?attr/tvPlayerRing") || chip.contains("?attr/tvPlayerCurrentRing"));
+
+        // 宿主是固定深色玻璃的两处对话框（复用同一批芯片布局）必须在子树内把两项重绑回玻璃可读色，
+        // 否则浅色表（FOCUS = 深蓝 #0B57D0）的芯片环画在固定玻璃上只有 1.83:1。
+        String overlay = "ThemeOverlay.WebHTV.GlassFocusRings";
+        String leanbackStyles = read("app/src/leanback/res/values/styles.xml");
+        assertTrue("leanback styles.xml 必须定义玻璃宿主覆盖层 " + overlay, leanbackStyles.contains("<style name=\"" + overlay + "\""));
+        int overlayStart = leanbackStyles.indexOf("<style name=\"" + overlay + "\"");
+        String overlayBody = leanbackStyles.substring(overlayStart, leanbackStyles.indexOf("</style>", overlayStart));
+        assertTrue(overlay + " 必须把 tvFocusRing 重绑到 tv_player_focus_ring",
+                overlayBody.contains("<item name=\"tvFocusRing\">@color/tv_player_focus_ring</item>"));
+        assertTrue(overlay + " 必须把 tvCurrentRing 重绑到 tv_player_current_ring",
+                overlayBody.contains("<item name=\"tvCurrentRing\">@color/tv_player_current_ring</item>"));
+        for (String dialog : new String[]{"dialog_episode_list.xml", "dialog_quick_search.xml"}) {
+            String layout = read("app/src/leanback/res/layout/" + dialog);
+            assertTrue(dialog + " 是固定深色玻璃面（DARK_GLASS_SHEETS），必须在根上应用 " + overlay,
+                    layout.contains("android:theme=\"@style/" + overlay + "\""));
+        }
+
+        // 「当前播放/当前生效」态：统一宽度 + 独立的当前态主题属性（不再是写死绿）。
+        for (String name : new String[]{"selector_control_sheet_button.xml",
                 "shape_chip_activated.xml", "shape_chip_round_activated.xml"}) {
             String path = LEANBACK_DRAWABLE + name;
             String body = values(read(path));
             assertTrue(path + " 的当前态环必须走 tvPlayerCurrentRing", body.contains("?attr/tvPlayerCurrentRing"));
+            assertTrue(path + " 的当前态环宽度必须引用唯一 token", body.contains("android:width=\"" + WIDTH + "\""));
+        }
+        for (String name : new String[]{"selector_video_item.xml"}) {
+            String path = LEANBACK_DRAWABLE + name;
+            String body = values(read(path));
+            assertTrue(path + " 的当前态环必须走 tvCurrentRing", body.contains("?attr/tvCurrentRing"));
             assertTrue(path + " 的当前态环宽度必须引用唯一 token", body.contains("android:width=\"" + WIDTH + "\""));
         }
 
@@ -538,21 +583,26 @@ public class TvFocusRingContractTest {
     }
 
     /**
-     * 播放页派生色必须真的在两类极端背景上可读。
+     * 视频层派生色必须真的在它的宿主背景上可读，且深色表不得再造出第二种高亮色。
      *
-     * <p>这是本轮的核心风险：浅色表 FOCUS 深蓝 {@code #0B57D0} 在固定玻璃上只有 1.83:1，
-     * 白环在纯白视频上只有 1.00:1。若以后有人把播放页环改回调色板原色或写死值，
-     * 本条会直接报出实测比值。
+     * <p>核心风险：浅色表 FOCUS 深蓝 {@code #0B57D0} 在固定玻璃上只有 1.83:1。
+     * 若以后有人把视频层环改回调色板原色或写死值，本条会直接报出实测比值。
+     *
+     * <p>2026-10-11：纯白视频不再是本层的约束背景（用户报告「播放页存在多个不同颜色的
+     * 高亮效果」）——把它当作背景会把深色表的环压成灰蓝 {@code #7695C5}，于是同一页出现
+     * 「应用表面近白 + 视频层灰蓝」两种高亮。深色表因此取与应用表面焦点环同值的近白，
+     * 由 {@code playerRingColoursStayOneUnifiedHighlightInTheDarkTable} 钉住。
+     * 代价：亮场景视频上的近白环对比度不足，仅在焦点落在画面框/播控条时出现。
      */
     @Test
-    public void playerRingColoursClearNonTextContrastOnVideoAndGlass() throws Exception {
-        // 与 ThemeResolver.PLAYER_RING_BACKDROPS 同一组：纯白视频 + 三档玻璃。
-        int[] backdrops = {0xFFFFFFFF, 0xFF2F315E, 0xFF282955, 0xFF303463};
+    public void playerRingColoursClearNonTextContrastOnGlassBackdrops() throws Exception {
+        // 与 ThemeResolver.PLAYER_RING_BACKDROPS 同一组：三档固定深色玻璃。
+        int[] backdrops = {0xFF2F315E, 0xFF282955, 0xFF303463};
         double minimum = 3.0;
         // 与 ThemeTokens.light()/dark() 的 colorPlayerFocusRing/colorPlayerCurrentRing 同步。
         int[][] rings = {
                 {0xFF447BF5, 0xFF00A95A},   // light
-                {0xFF7695C5, 0xFF00A95A},   // dark
+                {0xFFF5F7FF, 0xFF00A95A},   // dark（与应用表面焦点环同值）
         };
         for (int[] pair : rings) {
             for (int colour : pair) {
@@ -566,10 +616,44 @@ public class TvFocusRingContractTest {
             }
         }
         // 回归钉子：证明「直接用调色板原色」确实不可行，防止后人再试。
-        assertTrue("浅色表 FOCUS #0B57D0 对固定玻璃本来就不可读（这条是派生存在的理由）",
+        assertTrue("浅色表 FOCUS #0B57D0 对固定玻璃本来就不可读（这条是浅色表派生的理由）",
                 contrast(0xFF0B57D0, 0xFF303463) < 3.0);
-        assertTrue("白环对纯白视频本来就不可读（这条是派生存在的理由）",
-                contrast(0xFFFFFFFF, 0xFFFFFFFF) < 3.0);
+    }
+
+    /**
+     * 播放页只允许一种高亮色：深色表的视频层环必须与应用表面焦点环同值。
+     *
+     * <p>用户报告（2026-10-11，实机截图）：播放页同时出现近白环（应用表面元素）与灰蓝环
+     * （视频层元素：分段/排序芯片、控制条、画面框）。深色表下两类宿主的底色都是深色，
+     * 没有任何可读性理由保留第二种高亮色，所以两者相等；浅色表则**必须不同**：
+     * 深蓝 FOCUS 画在固定玻璃上只有 1.83:1，此时并存是为了可读性而不是配色随意。
+     */
+    @Test
+    public void playerRingColoursStayOneUnifiedHighlightInTheDarkTable() throws Exception {
+        String night = read(TOKENS_NIGHT);
+        String day = read(TOKENS_LIGHT);
+        assertEquals("深色表：视频层焦点环必须与应用表面焦点环同值（近白），否则同页会出现两种高亮色",
+                colour(night, "webhtv_color_focus"), colour(night, "webhtv_color_player_focus_ring"));
+        assertNotEquals("浅色表：视频层环必须仍是固定玻璃上的派生色，不能直接等于 FOCUS 槽",
+                colour(day, "webhtv_color_focus"), colour(day, "webhtv_color_player_focus_ring"));
+        // frozen 色板必须与 XML token 同步（ThemeContractTest 逐字段校验 51 个颜色，此处只钉这一项）。
+        assertEquals("深色 frozen 色板的 video 层环必须与 night token 同步",
+                colour(night, "webhtv_color_player_focus_ring"),
+                ThemeTokens.dark().colorPlayerFocusRing());
+        assertEquals("浅色 frozen 色板的 video 层环必须与 day token 同步",
+                colour(day, "webhtv_color_player_focus_ring"),
+                ThemeTokens.light().colorPlayerFocusRing());
+    }
+
+    /** 从 token 表里取一个颜色（十六进制文本 → ARGB）。 */
+    private static int colour(String tokens, String name) {
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+                .compile("<color name=\"" + name + "\">(#[0-9A-Fa-f]{6,8})</color>")
+                .matcher(tokens);
+        assertTrue(tokens + " 里找不到 " + name, matcher.find());
+        String value = matcher.group(1);
+        long parsed = Long.parseLong(value.substring(1), 16);
+        return value.length() == 7 ? (int) (0xFF000000L | parsed) : (int) parsed;
     }
 
     /** WCAG 相对亮度对比度，用于上面的播放页环断言。 */
