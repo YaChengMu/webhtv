@@ -49,6 +49,9 @@ import com.fongmi.android.tv.databinding.AdapterCustomCspBinding;
 import com.fongmi.android.tv.databinding.DialogCustomCspBinding;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.setting.CustomCspSetting;
+import com.fongmi.android.tv.theme.ThemeController;
+import com.fongmi.android.tv.theme.ThemeEditorUi;
+import com.fongmi.android.tv.theme.ThemeTokens;
 import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.ui.custom.CustomNestedScrollView;
 import com.fongmi.android.tv.ui.custom.CustomTextListener;
@@ -97,6 +100,9 @@ public class CustomCspDialog extends BaseAlertDialog {
     private boolean pendingFilesImport;
     private TextInputEditText pendingFileTarget;
     private Set<String> initialItemIds = new HashSet<>();
+    private ThemeTokens themeTokens() {
+        return ThemeController.current();
+    }
     private final Set<String> pendingDeleteIds = new HashSet<>();
     private CspEditor editor;
     private TextInputEditText recognizeInput;
@@ -679,7 +685,7 @@ public class CustomCspDialog extends BaseAlertDialog {
         LinearLayoutCompat container = new LinearLayoutCompat(requireContext());
         container.setOrientation(LinearLayoutCompat.VERTICAL);
         container.setPadding(0, dp(4), 0, 0);
-        MaterialTextView title = text(getString(R.string.setting_custom_csp_recognize_title), 18, Color.BLACK, true);
+        MaterialTextView title = text(getString(R.string.setting_custom_csp_recognize_title), 18, themeTokens().colorOnSurface(), true);
         container.addView(title, new LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         LinearLayoutCompat.LayoutParams params = new LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         params.topMargin = dp(10);
@@ -1000,8 +1006,8 @@ public class CustomCspDialog extends BaseAlertDialog {
         TextInputEditText input = new TextInputEditText(requireContext());
         input.setSelectAllOnFocus(false);
         input.setSingleLine(!multiline);
-        input.setTextColor(Color.BLACK);
-        input.setHintTextColor(Color.parseColor("#666666"));
+        input.setTextColor(themeTokens().colorOnSurface());
+        input.setHintTextColor(themeTokens().colorOnSurfaceVariant());
         input.setInputType(multiline ? InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS : InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         input.setGravity(multiline ? Gravity.START | Gravity.TOP : Gravity.CENTER_VERTICAL);
         return input;
@@ -1017,10 +1023,11 @@ public class CustomCspDialog extends BaseAlertDialog {
         container.setPadding(ResUtil.dp2px(20), ResUtil.dp2px(8), ResUtil.dp2px(20), 0);
         TextInputLayout layout = new TextInputLayout(requireContext());
         layout.setHint(hint);
+        ThemeTokens tokens = themeTokens();
         layout.setBoxBackgroundMode(TextInputLayout.BOX_BACKGROUND_OUTLINE);
-        layout.setBoxBackgroundColor(Color.WHITE);
-        layout.setBoxStrokeColor(ResUtil.getColor(R.color.dialog_outlined_button_stroke));
-        layout.setHintTextColor(ColorStateList.valueOf(Color.parseColor("#5F6368")));
+        layout.setBoxBackgroundColor(tokens.colorSurfaceContainerHighest());
+        layout.setBoxStrokeColor(tokens.colorOutline());
+        layout.setHintTextColor(ColorStateList.valueOf(tokens.colorOnSurfaceVariant()));
         layout.addView(input, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         container.addView(layout, new LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         return container;
@@ -1030,7 +1037,7 @@ public class CustomCspDialog extends BaseAlertDialog {
         LinearLayoutCompat container = new LinearLayoutCompat(requireContext());
         container.setOrientation(LinearLayoutCompat.VERTICAL);
         container.setPadding(ResUtil.dp2px(20), ResUtil.dp2px(8), ResUtil.dp2px(20), 0);
-        MaterialTextView label = text(getString(R.string.setting_custom_csp_other_fields), 12, Color.parseColor("#5F6368"), true);
+        MaterialTextView label = text(getString(R.string.setting_custom_csp_other_fields), 12, themeTokens().colorOnSurfaceVariant(), true);
         container.addView(label, new LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         LinearLayoutCompat.LayoutParams buttonParams = new LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(40));
         buttonParams.topMargin = dp(4);
@@ -1054,10 +1061,11 @@ public class CustomCspDialog extends BaseAlertDialog {
 
     private TextInputLayout createOtherValueLayout(TextInputEditText input) {
         TextInputLayout layout = new TextInputLayout(requireContext());
+        ThemeTokens tokens = themeTokens();
         layout.setBoxBackgroundMode(TextInputLayout.BOX_BACKGROUND_OUTLINE);
-        layout.setBoxBackgroundColor(Color.WHITE);
-        layout.setBoxStrokeColor(ResUtil.getColor(R.color.dialog_outlined_button_stroke));
-        layout.setHintTextColor(ColorStateList.valueOf(Color.parseColor("#5F6368")));
+        layout.setBoxBackgroundColor(tokens.colorSurfaceContainerHighest());
+        layout.setBoxStrokeColor(tokens.colorOutline());
+        layout.setHintTextColor(ColorStateList.valueOf(tokens.colorOnSurfaceVariant()));
         layout.addView(input, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         return layout;
     }
@@ -1257,24 +1265,32 @@ public class CustomCspDialog extends BaseAlertDialog {
     }
 
     private int statusColor(CustomCspSetting.Item item) {
-        if (!effectiveEnabled(item)) return Color.parseColor("#6F7378");
-        return item.isValid() && !item.hasInvalidExtensions() ? Color.parseColor("#137333") : Color.parseColor("#B3261E");
+        ThemeTokens tokens = themeTokens();
+        if (!effectiveEnabled(item)) return tokens.colorOnSurfaceVariant();
+        return item.isValid() && !item.hasInvalidExtensions() ? tokens.colorSuccess() : tokens.colorError();
     }
 
     private Drawable rowBackground(CustomCspSetting.Item item) {
+        ThemeTokens tokens = themeTokens();
         boolean disabled = !effectiveEnabled(item);
+        int focusFill = tokens.colorPrimaryContainer();
+        int focusStroke = ThemeEditorUi.readable(tokens.colorPrimary(), focusFill);
+        int normalFill = disabled ? tokens.colorSurfaceContainerHighest()
+                : item.isValid() ? tokens.colorSurfaceContainerHigh() : tokens.colorErrorContainer();
+        int normalStroke = disabled ? tokens.colorOutlineVariant()
+                : item.isValid() ? tokens.colorOutlineVariant() : tokens.colorError();
         StateListDrawable drawable = new StateListDrawable();
-        drawable.addState(new int[]{android.R.attr.state_focused}, rowShape("#E8F0FE", "#1A73E8", 2, 8));
-        drawable.addState(new int[]{android.R.attr.state_pressed}, rowShape("#E8F0FE", "#1A73E8", 2, 8));
-        drawable.addState(new int[]{android.R.attr.state_activated}, rowShape("#E8F0FE", "#1A73E8", 2, 8));
-        drawable.addState(new int[]{}, rowShape(disabled ? "#ECEFF1" : item.isValid() ? "#F5F6F7" : "#FFF7F7", disabled ? "#D5D9DE" : item.isValid() ? "#DADCE0" : "#F1C9C6", 1, 6));
+        drawable.addState(new int[]{android.R.attr.state_focused}, rowShape(focusFill, focusStroke, 2, 8));
+        drawable.addState(new int[]{android.R.attr.state_pressed}, rowShape(focusFill, focusStroke, 2, 8));
+        drawable.addState(new int[]{android.R.attr.state_activated}, rowShape(focusFill, focusStroke, 2, 8));
+        drawable.addState(new int[]{}, rowShape(normalFill, normalStroke, 1, 6));
         return drawable;
     }
 
-    private GradientDrawable rowShape(String color, String stroke, int strokeDp, int radiusDp) {
+    private GradientDrawable rowShape(int color, int stroke, int strokeDp, int radiusDp) {
         GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(Color.parseColor(color));
-        drawable.setStroke(dp(strokeDp), Color.parseColor(stroke));
+        drawable.setColor(color);
+        drawable.setStroke(dp(strokeDp), stroke);
         drawable.setCornerRadius(dp(radiusDp));
         return drawable;
     }
@@ -1295,7 +1311,7 @@ public class CustomCspDialog extends BaseAlertDialog {
         view.setSingleLine(true);
         view.setPadding(dp(8), dp(3), dp(8), dp(3));
         GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(Color.WHITE);
+        drawable.setColor(themeTokens().colorSurfaceContainerHighest());
         drawable.setStroke(dp(1), color);
         drawable.setCornerRadius(dp(6));
         view.setBackground(drawable);
@@ -1307,11 +1323,12 @@ public class CustomCspDialog extends BaseAlertDialog {
     }
 
     private int titleColor(boolean enabled) {
-        return Color.parseColor(enabled ? "#202124" : "#8A8D91");
+        ThemeTokens tokens = themeTokens();
+        return enabled ? tokens.colorOnSurface() : tokens.colorOnSurfaceVariant();
     }
 
     private int detailColor(boolean disabled) {
-        return Color.parseColor(disabled ? "#9AA0A6" : "#5F6368");
+        return themeTokens().colorOnSurfaceVariant();
     }
 
     private void addDetail(LinearLayoutCompat root, String value) {
@@ -1334,7 +1351,7 @@ public class CustomCspDialog extends BaseAlertDialog {
         button.setMinimumHeight(dp(36));
         button.setPadding(dp(6), 0, dp(6), 0);
         ColorStateList bg = ContextCompat.getColorStateList(requireContext(), tonal ? R.color.dialog_tonal_button_bg : R.color.dialog_outlined_button_bg);
-        ColorStateList fg = danger ? ColorStateList.valueOf(Color.parseColor("#B3261E")) : ContextCompat.getColorStateList(requireContext(), tonal ? R.color.dialog_tonal_button_text : R.color.dialog_outlined_button_text);
+        ColorStateList fg = danger ? ColorStateList.valueOf(themeTokens().colorError()) : ContextCompat.getColorStateList(requireContext(), tonal ? R.color.dialog_tonal_button_text : R.color.dialog_outlined_button_text);
         button.setBackgroundTintList(bg);
         button.setTextColor(fg);
         if (!tonal) {
@@ -1354,7 +1371,7 @@ public class CustomCspDialog extends BaseAlertDialog {
         AppCompatImageButton button = new AppCompatImageButton(requireContext());
         button.setBackgroundResource(R.drawable.selector_dialog_switch);
         button.setImageResource(icon);
-        button.setColorFilter(Color.parseColor("#5F6368"));
+        button.setColorFilter(themeTokens().colorOnSurfaceVariant());
         button.setContentDescription(getString(contentDescription));
         button.setFocusable(true);
         button.setPadding(dp(8), dp(8), dp(8), dp(8));
