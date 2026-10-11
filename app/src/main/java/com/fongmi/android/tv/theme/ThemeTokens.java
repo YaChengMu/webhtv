@@ -105,7 +105,7 @@ public record ThemeTokens(
             0xFF000000,
             0xFF0B57D0,
             1.0f,
-            // 浅色表视频层环：FOCUS 深蓝在固定深箭玻璃上仅 1.83:1，
+            // 浅色表视频层环：FOCUS 深蓝在固定深靛玻璃上仅 1.83:1，
             // 取 ThemeResolver 夹取到 ≥3:1 的派生值（与 values/webhtv_tokens.xml 同步）。
             0xFF447BF5,
             0xFF00A95A,

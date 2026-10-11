@@ -393,6 +393,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private boolean useParse;
     private boolean inlineStarted;
     private boolean inlinePlaybackPending;
+    /** 置位 {@link #inlinePlaybackPending} 的请求代际；0 表示当前没有待定请求。 */
+    private int inlinePlaybackPendingGeneration;
     private final Runnable inlineLoadingSpeedRefresh = new Runnable() {
         @Override
         public void run() {
@@ -2340,7 +2342,6 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         button.setStrokeColor(ColorStateList.valueOf(focused ? focusStroke() : stroke));
     }
 
-    /** TV 焦点环的唯一代码来源：与 {@code ?attr/tvFocusRing} 同一取值，跟随主题 FOCUS 槽。 */
     /**
      * 焦点环宽度（px）：唯一来源 {@code @dimen/webhtv_focus_ring_width}。
      *
@@ -2352,6 +2353,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         return getResources().getDimensionPixelSize(R.dimen.webhtv_focus_ring_width);
     }
 
+    /** TV 焦点环的唯一代码来源：与 {@code ?attr/tvFocusRing} 同一取值，跟随主题 FOCUS 槽。 */
     private int focusStroke() {
         return ThemeController.focusRingColor(this);
     }
@@ -7610,6 +7612,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         inlinePlaybackPending = true;
         updateInlineLoading();
         int generation = ++inlinePlaybackGeneration;
+        inlinePlaybackPendingGeneration = generation;
         String key = getKeyText();
         String flag = selectedFlag.getFlag();
         String episodeUrl = selectedEpisode.getUrl();
@@ -7619,7 +7622,12 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             try {
                 Result result = SiteApi.playerContent(key, flag, episodeUrl, playerKernel);
                 runOnAliveUi(() -> {
-                    if (!isInlinePlaybackRequestCurrent(generation, key, flag, episodeUrl)) return;
+                    if (!isInlinePlaybackRequestCurrent(generation, key, flag, episodeUrl)) {
+                        // 请求已被作废（换集/换源/详情重载/外部播放等）：不会再有结果来收圈，
+                        // 由置位它的这个代际负责释放。
+                        releaseInlinePlaybackPending(generation);
+                        return;
+                    }
                     inlinePlaybackPending = false;
                     String resolvedUrl = result.getUrl() == null ? "" : result.getUrl().v();
                     if (!TextUtils.isEmpty(failedUrl) && TextUtils.equals(failedUrl, resolvedUrl)) {
@@ -7632,7 +7640,10 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             } catch (Throwable e) {
                 String message = e.getMessage();
                 runOnAliveUi(() -> {
-                    if (!isInlinePlaybackRequestCurrent(generation, key, flag, episodeUrl)) return;
+                    if (!isInlinePlaybackRequestCurrent(generation, key, flag, episodeUrl)) {
+                        releaseInlinePlaybackPending(generation);
+                        return;
+                    }
                     inlinePlaybackPending = false;
                     String fallback = TextUtils.isEmpty(failureMessage) ? getString(R.string.error_play_url) : failureMessage;
                     showInlineError(TextUtils.isEmpty(message) ? fallback : message);
@@ -9014,6 +9025,11 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         String episodeUrl = selectedEpisode.getUrl();
         if (TextUtils.isEmpty(flag) || TextUtils.isEmpty(episodeUrl)) return false;
         int generation = ++inlinePlaybackGeneration;
+        // 只自增代际、不接替请求：在途的取址回调会因“不再是最新请求”直接返回，
+        // 它留下的加载标记必须在这里释放，否则圈永久留在屏上，且同一集会因
+        // isSamePendingInlinePlayback 恒真而无法再次起播。切内核自身的缓冲显示由
+        // updateInlineLoading 的引擎条件兜住，不依赖这个标记。
+        releaseInlinePlaybackPending();
         long position = player().getPosition();
         float speed = player().getSpeed();
         boolean repeat = player().isRepeatOne();
@@ -9050,7 +9066,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private void cancelPendingInlinePlayerSwitch() {
         inlinePlaybackGeneration++;
-        updateInlineDisplayPanel();
+        // 同 refreshAndSwitchInlinePlayer：作废在途取址请求时必须一并释放它留下的加载标记。
+        releaseInlinePlaybackPending();
     }
 
     private boolean isInlinePlayerSwitchRequestCurrent(int generation, String key, String flag, String episodeUrl) {
@@ -10000,6 +10017,26 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         if (width >= ResUtil.dp2px(1200)) return 5;
         if (width >= ResUtil.dp2px(720)) return 4;
         return 3;
+    }
+
+    /**
+     * 释放被作废的取流请求留下的加载标记。
+     *
+     * <p>没有结果回调会再来收圈（回调要么随任务被取消而不执行，要么因请求失效直接返回），
+     * 标记残留会让加载圈永久留在屏上，并让 {@link #isSamePendingInlinePlayback} 恒真、
+     * 同一集无法再次起播。
+     */
+    private void releaseInlinePlaybackPending() {
+        if (!inlinePlaybackPending) return;
+        inlinePlaybackPending = false;
+        inlinePlaybackPendingGeneration = 0;
+        updateInlineDisplayPanel();
+    }
+
+    /** 只有置位该标记的那个请求才有权释放它，避免旧回调清掉新请求的标记。 */
+    private void releaseInlinePlaybackPending(int generation) {
+        if (inlinePlaybackPendingGeneration != generation) return;
+        releaseInlinePlaybackPending();
     }
 
     private boolean isSamePendingInlinePlayback(Episode episode) {

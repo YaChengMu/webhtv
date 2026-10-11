@@ -10,7 +10,7 @@
         <item name="tvCurrentRing">@color/tv_item_current_ring</item>
         <item name="tvNormalStroke">@color/tv_item_normal_stroke</item>
         <!--
-            播放页（视频层）环色。不能直接用 ?attr/tvFocusRing：浅色表 FOCUS 深蓝在固定深箭
+            播放页（视频层）环色。不能直接用 ?attr/tvFocusRing：浅色表 FOCUS 深蓝在固定深靛
             玻璃上仅 1.83:1。这里绑的是派生值：浅色表为 ThemeResolver 夹取到 ≥3:1 的结果
             （#447BF5），深色表直接与应用表面焦点环同值（近白）——深色表两类宿主的底色都是
             深色，近白对它们都可读，于是播放页只剩一种高亮色（主题改 FOCUS / playerCurrent
