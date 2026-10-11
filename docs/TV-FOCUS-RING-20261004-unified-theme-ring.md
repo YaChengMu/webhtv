@@ -840,3 +840,99 @@ dp 字面量或 `*_DP` 常量（实测扫到 12 处）；配套
 - 同批次新增的两条契约测试（`fullscreenPlayerPathsKeepAnInsetFocusRing`、
   `fullscreenPlayerPanelDrawsAnInsetThemeFocusRing`）随之移除，避免它们反过来要求错误行为。
 - 控制栏按钮的环（§14 的统一宽度 + 主题派生色）**未受影响**。
+
+## 17. 追加：默认配色向上游对齐（2026-10-10 第六轮）
+
+### 17.1 用户原始要求
+
+> 最好是吧默认主题配色靠近上游 https://github.com/webhtv/webhtv/tree/Silent1566
+> 比如：默认选中边框是白色，播放器加载中效果是白色等，手机和电视版都注意一下
+>
+> 后续补充：电视版应该默认深色更好吧？大白天看的是时候浅色可能看不清，大晚上的时候浅色可能太刺眼？
+
+### 17.2 上游基线（clone `Silent1566` 分支实测）
+
+| 项目 | 上游 | 本仓库（改前） |
+| --- | --- | --- |
+| TV 主题 | `Theme.Material3.Dark.NoActionBar`（**强制深色**，`windowBackground=#000000`） | DayNight（TV 默认解析**浅色表**） |
+| TV `colorPrimary` | `#FFFFFF` | 主题蓝 `#0B57D0` |
+| 焦点环色 | **`@color/white`**（32 处 drawable 写死） | `?attr/tvFocusRing`（浅色 `#0B57D0` / 夜间 `#A8C7FA`） |
+| 焦点环宽度 | 1.5dp | 1.5dp（§12 已对齐）✓ |
+| 播放器加载中 | **`@color/white`** | `?attr/colorPrimary` |
+| 加载中网速文字 | `@color/white` | `?attr/webhtvColorOnWallpaper`（=白）✓ |
+
+上游之所以能用白环，是因为它 **TV 强制深色**（纯黑底，白环 21:1）。本仓库 TV 是 DayNight
+且默认落到浅色表，白环对 `#F8FAFD` 只有 **1.05:1**——直接用白环会让焦点彻底消失，
+并且会被 `ThemeContrast` 的 `focus/surface ≥3:1` 门拒绝（启动即 fallback）。
+
+### 17.3 决策：TV 产品默认深色（与上游一致）
+
+用户判断与上游一致，且同时解开了白环的可读性阻塞。**TV 的“跟随系统”不再等于“跟随一个
+通常恒为浅色的系统默认”**，而是产品默认深色；用户仍可在外观设置里显式选浅色/深色。
+mobile 保持“跟随系统”不变。
+
+理由：电视多在暗环境观看，大面积浅色亮底夜间刺眼；且深色底上白环（17–18:1）才成立。
+
+### 17.4 变更清单
+
+| 文件 | 变更 |
+| --- | --- |
+| `ThemeController.applyNightModeToApp()` | `default` 分支按 flavour 分流：leanback → `MODE_NIGHT_YES`，mobile → `MODE_NIGHT_FOLLOW_SYSTEM`（显式浅色/深色仍优先） |
+| `values-night/webhtv_tokens.xml` | `webhtv_color_focus` → **`#F5F7FF`**（近白，见 17.5） |
+| `ThemeTokens.dark()` | `colorFocus` 字面量同步为 `#F5F7FF` |
+| `{leanback,mobile}/res/layout/view_progress.xml` | `indicatorColor` → **`@color/white`**（与上游一致；两处都叠在视频上） |
+| `color/following_button_primary_text.xml` | 写死白 → `@color/webhtv_color_on_primary`（见 17.5） |
+| `color/following_button_secondary_text.xml` | focused/pressed 写死白 → `@color/webhtv_color_on_primary` |
+
+### 17.5 顺带修掉的两个连带缺陷（都是本轮改动暴露/引入的）
+
+**（a）追更页按钮「白底白字」**：这两个按钮的 `backgroundTint` 在 focused/pressed 时取
+`following_button_focus`（= `webhtv_color_focus`），而文本此前写死 `@android:color/white`：
+
+| 表 | 焦点填充 | 白文本对比度 |
+| --- | --- | --- |
+| 浅色 | `#0B57D0` | 6.39:1 ✓（所以此前没被发现） |
+| 深色 | `#A8C7FA` | **1.72:1** ✗（已经坏了，但 TV 默认浅色时不显形） |
+
+TV 默认深色后必然显形。改为与填充配对的 `webhtv_color_on_primary`：浅色 `#FFFFFF`
+（6.39:1）、深色 `#062E6F`（7.50:1）。
+
+**（b）深色焦点环不能用纯白**：本仓库有 `ThemeBinder` 运行时改写通道，它按「颜色 → 语义角色」
+**精确匹配**；而 `webhtv_on_wallpaper` 两张表恒为 `#FFFFFF`。若焦点也取纯白，
+`ThemeColorIndex` 会把纯白映射到 `FOCUS` 角色，用户切换/自定义主题时**壁纸上的白色文字会被
+改写成焦点色**（`ThemeBaseWiringTest.wallpaperForegroundIsLightAndNotBinderRewritable` 实测抓出：
+`replacementFor(#FFFFFF, light)` 由 `null` 变成 `#0B57D0`）。
+故取 **`#F5F7FF`**：与纯白视觉上无法区分，对深色 surface 仍有 **17.29:1**，且不与任何 dark 角色同值。
+
+### 17.6 新增契约测试（`ThemeControllerContractTest`）
+
+- `tvDefaultsToDarkWhileMobileKeepsFollowingTheSystem`：follow-system 分支必须按 flavour 分流，
+  且显式浅色/深色仍优先。
+- `darkFocusRingIsNearWhiteButNeverPureWhite`：深色焦点必须亮（对 surface ≥10:1）且**不等于纯白**
+  （防 binder 碰撞回归），并与 `ThemeTokens.dark()` 字面量同值。
+- `followingButtonTextPairsWithItsFocusFill`：两个文本 selector 不得再写死白色，必须取配对 on-色，
+  且两张表的 `onPrimary/focus` 配对都必须 ≥4.5:1。
+
+### 17.7 本轮验证证据
+
+| 检查 | 结果 |
+| --- | --- |
+| `ThemeControllerContractTest` | 11/11（新增 3 条） |
+| `:app:testLeanbackArm64_v8aDebugUnitTest` | 4169 tests / 0 failures |
+| `:app:testMobileArm64_v8aDebugUnitTest` | 4984 tests / 0 failures |
+| `scripts/check_ui_tokens.sh` | `violations=1`（= 基线）、`hex_colors=0`、`contrast failures=0` |
+
+实机复核（dev1，覆盖安装同签名 Debug 包；系统 `cmd uimode night no` 即**白天**）：
+
+| 量 | 修复前 | 修复后 |
+| --- | --- | --- |
+| 白天 + 未自定义主题时的焦点环 | 浅色表 `#0B57D0`（45484 处为 0） | **深色表 `#F5F7FF` = 45484 px** |
+| 浅色表焦点环像素 | 有 | **0**（确认 TV 默认已走深色表） |
+| 播放器加载中指示器 | `?attr/colorPrimary` | `@color/white`（两版） |
+
+### 17.8 回滚
+
+- TV 默认深色：`applyNightModeToApp()` 的 `default` 分支改回 `MODE_NIGHT_FOLLOW_SYSTEM`。
+- 深色焦点环：`values-night/webhtv_tokens.xml` 与 `ThemeTokens.dark()` 改回 `#A8C7FA`。
+- 加载指示器：两个 `view_progress.xml` 改回 `?attr/colorPrimary`。
+- 追更页文本：两个 `following_button_*_text.xml` 改回 `@android:color/white`。

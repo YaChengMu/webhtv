@@ -46,7 +46,16 @@
     <color name="webhtv_color_player_focus_ring">#7695C5</color>
     <color name="webhtv_color_player_current_ring">#00A95A</color>
     <color name="webhtv_color_shadow">#000000</color>
-    <color name="webhtv_color_focus">#A8C7FA</color>
+    <!--
+        深色表焦点环 = 近白（与上游的“白色焦点环”观感一致）。
+
+        为什么不是纯 #FFFFFF：本仓库有 ThemeBinder 运行时改写通道，它按“颜色→语义角色”
+        精确匹配；而 webhtv_on_wallpaper 两张表恒为 #FFFFFF。若焦点也取 #FFFFFF，
+        ThemeColorIndex 会把 #FFFFFF 映射到 FOCUS 角色，用户切换/自定义主题时
+        壁纸上的白色文字会被改写成焦点色（ThemeBaseWiringTest 钉住了这条不变量）。
+        #F5F7FF 与纯白视觉上无法区分，对深色 surface 仍有 17.3:1。
+    -->
+    <color name="webhtv_color_focus">#F5F7FF</color>
     <color name="webhtv_color_player_control">#FFFFFF</color>
     <color name="webhtv_color_player_control_muted">#CCFFFFFF</color>
     <color name="webhtv_color_player_control_active">#FFD35C</color>

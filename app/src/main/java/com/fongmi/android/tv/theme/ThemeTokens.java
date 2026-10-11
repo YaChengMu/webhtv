@@ -161,7 +161,7 @@ public record ThemeTokens(
             0xFF0B57D0,
             0x8A000000,
             0xFF000000,
-            0xFFA8C7FA,
+            0xFFF5F7FF,
             1.1f,
             0xFF7695C5,
             0xFF00A95A,
