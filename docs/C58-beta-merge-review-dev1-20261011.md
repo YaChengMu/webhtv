@@ -228,8 +228,27 @@
 
 ## 交付坐标
 
-（提交后回填）
+| 项 | 值 |
+| --- | --- |
+| 合并提交 | `2ee22ce21655791e87164468c3c94d4db761601c`（**双父**：第一父 `649275b76279d7a96a17eb2d48d04578d1a2b34e` = 合并前 dev1；第二父 `fb4fd7d99ca1547ea624f3d5f1b7f3cd81b880a5` = 合并时刻 beta tip） |
+| recovery tag | `recovery/C58-beta-merge-review-dev1-20261011/20261011112617-2ee22ce21655` |
+| 推送结果 | `git push origin dev1` → `913ae81d1..2ee22ce21  dev1 -> dev1`；`git rev-parse origin/dev1` == `2ee22ce21655791e87164468c3c94d4db761601c` == 本地 HEAD |
+| PR | **#434** `https://github.com/Silent1566/webhtv/pull/434`（`--base beta --head dev1`，**只创建未合并**） |
+| PR 状态校验 | `state=OPEN`、`mergedAt=null`、`mergeable=MERGEABLE`、`changedFiles=83` |
+| PR 文件集校验 | `gh api repos/Silent1566/webhtv/pulls/434/files --paginate --jq '.[].filename' \| sort` 与 `git diff --name-only origin/beta HEAD \| sort` **逐项一致**（83/83，`diff` 无输出） |
+| 提交后净差异 | `git diff --name-only origin/beta HEAD` = **83 路径**（82 功能/测试/文档 + 本任务文档 `docs/C58-beta-merge-review-dev1-20261011.md`） |
+| 提交后删除清单 | 仅 `app/src/main/res/drawable/selector_cache_button_focus.xml`（dev1 自身主题环改造，非 beta 丢失） |
+| 提交后严格复活行数 | **0**（对 `be1b02e06` 的 2388 条删除行 ∩ dev1 新增行 32 行逐行核对） |
+| 收尾复核 | `git merge-base --is-ancestor origin/beta HEAD` 为**真**；`MERGE_HEAD` 已清除；`git status --porcelain` 干净 |
 
 ## 闭环记录
 
-（推送与 PR 创建后回填）
+| 步骤 | 结果 |
+| --- | --- |
+| 推送前复核远端 beta | `git ls-remote origin refs/heads/beta` = `fb4fd7d99ca1547ea624f3d5f1b7f3cd81b880a5`，与合并第二父一致（合并基点未被推进，无需增量折入） |
+| 提交父结构验证 | `git rev-list --parents -n1 HEAD` = `2ee22ce21 649275b76 fb4fd7d99`（**2 个父**）；`git rev-parse HEAD^2` == beta tip → beta 侧提交以合并父身份进入历史，**未顺带作为 dev1 自己的提交** |
+| PR 创建 | `gh pr create --repo Silent1566/webhtv --base beta --head dev1 --body-file /tmp/c58/pr_body.md` → PR #434 |
+| 未合并确认 | `gh pr view 434 --json state,mergedAt` → `OPEN` / `null`（未执行任何 merge 操作，符合「只负责创建」） |
+| 临时文件清理 | `/tmp/c58/**` 已清理 |
+
+**本任务闭环完成。** 三项用户要求均已满足：① 合并远端 beta 最新代码且远端已移除/回退的提交零复活；② 复评全部已修改代码（含 11 个已提交未推送提交）并修复 3 类真实缺陷、3 轮评审通过；③ 提交、推送、创建 PR #434（中文描述、只创建未合并）。
