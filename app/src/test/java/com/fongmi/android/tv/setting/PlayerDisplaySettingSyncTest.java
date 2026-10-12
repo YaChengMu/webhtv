@@ -25,6 +25,20 @@ public class PlayerDisplaySettingSyncTest {
     }
 
     @Test
+    public void tvScreenDisplayDialogRowsUseTheThemeAwareContrastWiring() throws Exception {
+        for (String flavor : new String[]{"leanback", "mobile"}) {
+            String layout = read(sourcePath(flavor, "res").resolve(Path.of("layout", "adapter_player_osd.xml")));
+            String dialog = read(sourcePath(flavor, "java").resolve(Path.of("com", "fongmi", "android", "tv", "ui", "dialog", "PlayerOsdDialog.java")));
+            assertTrue(flavor + " 屏显行必须使用主题化行背景", layout.contains("@drawable/selector_player_settings_row"));
+            assertTrue(flavor + " 屏显眼睛按钮必须使用主题化按钮背景", layout.contains("@drawable/selector_player_settings_switch"));
+            assertTrue(flavor + " 屏显眼睛图标必须使用主题化前景", layout.contains("@color/player_settings_icon_tint"));
+            assertFalse(flavor + " 屏显行不得回退到固定浅色卡片", layout.contains("selector_git_cloud_card"));
+            assertTrue(flavor + " 屏显对话框必须应用活动主题行颜色", dialog.contains("PlayerSettingsRowTheme.apply(holder.binding.root, holder.binding.name"));
+            assertTrue(flavor + " 屏显对话框必须应用活动主题图标颜色", dialog.contains("PlayerSettingsRowTheme.applySwitch(holder.binding.visible"));
+        }
+    }
+
+    @Test
     public void playerOsdControllerHonorsResolutionDisplayToggle() throws Exception {
         String source = read(mainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "custom", "PlayerOsdController.java")));
         int method = source.indexOf("private void setTopLeft(PlayerManager player)");
