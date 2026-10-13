@@ -76,6 +76,13 @@
             <meta-data
                 android:name="com.fongmi.android.tv.Startup"
                 android:value="androidx.startup" />
+            <!-- Some TV firmware defaults the app to device-protected storage. -->
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                tools:node="remove" />
+            <meta-data
+                android:name="com.fongmi.android.tv.following.FollowingWorkInitializer"
+                android:value="androidx.startup" />
         </provider>
 
         <activity
