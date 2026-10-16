@@ -2839,24 +2839,40 @@ private boolean runtimeSourceOnly;
         }
 
         // 简介移到站源行下方显示；内容相同时不重置 maxLines，避免播放页再次布局闪动。
-        Object desc = mBinding.content.getTag();
-        String overview = desc == null ? "" : desc.toString();
-        if (!TextUtils.isEmpty(overview)) {
-            CharSequence overviewText = getString(R.string.detail_content, overview);
-            if (!TextUtils.equals(mBinding.tmdbOverview.getText(), overviewText)) {
-                mBinding.tmdbOverview.setSingleLine(false);
-                mBinding.tmdbOverview.setHorizontallyScrolling(false);
-                mBinding.tmdbOverview.setMaxLines(Integer.MAX_VALUE);
-                mBinding.tmdbOverview.setText(overviewText);
-                mBinding.tmdbOverview.post(this::updateTmdbOverviewButton);
-            }
-            mBinding.tmdbOverview.setVisibility(View.VISIBLE);
-        } else {
-            mBinding.tmdbOverview.setVisibility(View.GONE);
-        }
+        updateOverviewPreview();
 
         // 简介按钮默认隐藏，焦点先把视频右移到简介按钮（按钮显示时）或搜索按钮
         mBinding.video.setNextFocusRightId(R.id.content);
+    }
+
+    /**
+     * 把详情文本（mBinding.content 的 tag）铺到简介区做「预览一部分」。
+     *
+     * 影视原生 (DIRECT) 模式下 mTmdbUIAdapter 为 null，applyTmdbDetailFields() 永不运行，
+     * 此前没有任何代码写这个节点，于是简介只能靠点按钮弹窗看，用户报告「简介不显示，
+     * 必须点击简介才能弹窗，以前这里会显示一部分」。
+     */
+    private void updateOverviewPreview() {
+        Object desc = mBinding.content.getTag();
+        String overview = desc == null ? "" : desc.toString();
+        if (TextUtils.isEmpty(overview)) {
+            mBinding.tmdbOverview.setText("");
+            mBinding.tmdbOverview.setVisibility(View.GONE);
+            return;
+        }
+        CharSequence overviewText = getString(R.string.detail_content, overview);
+        if (!TextUtils.equals(mBinding.tmdbOverview.getText(), overviewText)) {
+            mBinding.tmdbOverview.setSingleLine(false);
+            mBinding.tmdbOverview.setHorizontallyScrolling(false);
+            mBinding.tmdbOverview.setMaxLines(Integer.MAX_VALUE);
+            mBinding.tmdbOverview.setText(overviewText);
+        }
+        // 详情列可能已经被沉浸音频收起：setDetail() 里 checkFlag() 排在 setText() 之前，
+        // checkFlag()->onItemClick()->onRefresh()->getPlayer() 会先 setAudioStageVisible(true)
+        // 把整列（含本节点）收掉，这里再无条件下 show 就会把刚收起的简介重新亮在音频面板旁边。
+        // 详情列的显示/隐藏以 setVideoDetailsVisible() 为唯一所有者，本写入只负责是否“有内容”。
+        mBinding.tmdbOverview.setVisibility(mAudioStageVisible ? View.GONE : View.VISIBLE);
+        mBinding.tmdbOverview.post(this::updateTmdbOverviewButton);
     }
 
     private void updateTmdbOverviewButton() {
@@ -2872,8 +2888,11 @@ private boolean runtimeSourceOnly;
             }
         }
         boolean truncated = isTextTruncated(view);
-        mBinding.content.setVisibility(truncated ? View.VISIBLE : View.GONE);
-        mBinding.video.setNextFocusRightId(truncated ? R.id.content : R.id.keep);
+        // 影视原生没有 TMDB 那条「按钮由富集结果决定」的回显路径，简介按钮是看全文的唯一入口，
+        // 不能因为文字恰好没被截断就把它藏掉，否则简介区一旦放得下全文就再也点不开。
+        boolean directMode = !isTmdbSourceEnabled();
+        mBinding.content.setVisibility(truncated || directMode ? View.VISIBLE : View.GONE);
+        mBinding.video.setNextFocusRightId(truncated || directMode ? R.id.content : R.id.keep);
     }
 
     private int getTmdbOverviewMaxLines(TextView view, android.text.Layout layout) {
@@ -2930,6 +2949,9 @@ private boolean runtimeSourceOnly;
         setText(mBinding.director, R.string.detail_director, item.getDirector());
         setText(mBinding.actor, R.string.detail_actor, item.getActor());
         setText(mBinding.remark, 0, item.getRemarks());
+        // TMDB 模式下简介区由 applyTmdbDetailFields() 按富集结果接管，此处只喂影视原生，
+        // 否则站源简介会先上屏、TMDB 到达后再换一次，产生用户可见的文本闪动。
+        if (!isTmdbSourceEnabled()) updateOverviewPreview();
         updateAudioStageText();
     }
 
@@ -10419,6 +10441,9 @@ private void setVideoDetailsVisible(boolean visible) {
         mBinding.row1.setVisibility(value);
         mBinding.director.setVisibility(showNativeMetadata && !TextUtils.isEmpty(mBinding.director.getText()) ? View.VISIBLE : View.GONE);
         mBinding.actor.setVisibility(showNativeMetadata && !TextUtils.isEmpty(mBinding.actor.getText()) ? View.VISIBLE : View.GONE);
+        // 简介区必须跟着一起收：沉浸音频/纯音频播放时它叠在播放器右侧，不收会在音频面板旁边
+        // 留一块详情文本。影视原生此前没有内容所以看不出来，现在它真的有文字了。
+        mBinding.tmdbOverview.setVisibility(visible && !TextUtils.isEmpty(mBinding.tmdbOverview.getText()) ? View.VISIBLE : View.GONE);
         mBinding.row2.setVisibility(value);
         mBinding.scroll.setVisibility(value);
     }
