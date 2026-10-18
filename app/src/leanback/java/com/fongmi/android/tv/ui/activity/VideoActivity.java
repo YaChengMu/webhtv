@@ -58,6 +58,7 @@ import com.fongmi.android.tv.bean.Danmaku;
 import com.fongmi.android.tv.bean.Episode;
 import com.fongmi.android.tv.bean.EpisodePositionCache;
 import com.fongmi.android.tv.bean.Flag;
+import com.fongmi.android.tv.bean.FlagPreferenceCache;
 import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.ui.helper.EpisodeSeasonSnapshot;
 import com.fongmi.android.tv.bean.History;
@@ -1230,9 +1231,73 @@ private boolean runtimeSourceOnly;
         String flagKey = mHistory == null ? "" : mHistory.getSourceBindingKey();
         String flagName = mHistory == null ? "" : mHistory.getVodFlag();
         String episodeUrl = mHistory == null ? "" : mHistory.getEpisodeUrl();
+        // 用户最后一次显式切换的线路优先于 History 里的线路快照：History.vodFlag 只是
+        // 「上次起播时的线路」的副产物，切线路而没重新起播时它不会更新，杀进程后若还
+        // 以它为准就会退回旧线路甚至第一条。偏好同样要能定位到这次要播的集，
+        // 否则会劫持跨源解算出的、确实含目标集的那条线路。
+        Flag preferred = findPreferredFlag(flags, episodeUrl);
+        if (preferred != null) return preferred;
         Flag selected = com.fongmi.android.tv.ui.helper.TmdbUIAdapter.selectPlaybackFlag(
                 flags, flagKey, episodeUrl, flagName);
         return selected == null ? flags.get(0) : selected;
+    }
+
+    /**
+     * 记住用户显式切换的线路。线路选择原本只作为播放副产物写进 History，而切线路后
+     * 不一定重新起播（seamless 没切集时不会走 onRefresh），mHistory 的 vodFlag/
+     * sourceBindingKey 仍指向旧线路，杀进程后就退回了旧线路。这里与详情页保持一致，
+     * 切一下就落盘偏好，不依赖播放进度。
+     */
+    private void rememberFlagSelection(Flag flag) {
+        if (flag == null) return;
+        int index = mFlagAdapter == null ? -1 : mFlagAdapter.indexOf(flag);
+        if (index < 0 && mVod != null) index = com.fongmi.android.tv.ui.helper.TmdbUIAdapter.flagIndex(mVod.getFlags(), flag);
+        // 索引未知时不写稳定键：Flag.stableKey 会把 -1 夹成 0，留下一个必然命中首条线路的假键。
+        String stableKey = index >= 0 ? com.fongmi.android.tv.ui.helper.TmdbUIAdapter.flagKey(flag, index) : "";
+        FlagPreferenceCache.get().put(getKey(), getId(), stableKey, flag.getFlag());
+        Task.execute(() -> FlagPreferenceCache.get().save());
+        if (mHistory == null) return;
+        // History 里的 sourceBindingKey 与既有 setHistoryFlag 保持一致：稳定键不可用时退化到适配器当前键。
+        String historyKey = TextUtils.isEmpty(stableKey)
+                ? (mTmdbUIAdapter == null ? "" : mTmdbUIAdapter.activeFlagKey(flag))
+                : stableKey;
+        mHistory.setVodFlag(flag.getFlag());
+        if (!TextUtils.isEmpty(historyKey)) mHistory.setSourceBindingKey(historyKey);
+        // 还没起播（无进度）时不写库，避免在「最近观看」里留下一条没有进度的空记录。
+        if (mHistory.canSave()) syncHistory();
+    }
+
+    /**
+     * 读取上次显式选中的线路。稳定键（线路名#索引）优先，源站线路增删导致索引漂移时
+     * 退化用线路名匹配。episodeUrl 非空时要求该线路确实含这一集。
+     */
+    private Flag findPreferredFlag(List<Flag> flags, String episodeUrl) {
+        FlagPreferenceCache.FlagPreference preference = FlagPreferenceCache.get().get(getKey(), getId());
+        if (preference == null) return null;
+        Flag candidate = null;
+        String stableKey = preference.getStableKey();
+        if (!TextUtils.isEmpty(stableKey)) {
+            for (int i = 0; i < flags.size(); i++) {
+                Flag flag = flags.get(i);
+                if (flag != null && TextUtils.equals(stableKey, com.fongmi.android.tv.ui.helper.TmdbUIAdapter.flagKey(flag, i))) {
+                    candidate = flag;
+                    break;
+                }
+            }
+        }
+        if (candidate == null) {
+            String flagName = preference.getFlagName();
+            if (TextUtils.isEmpty(flagName)) return null;
+            for (Flag flag : flags) {
+                if (flag != null && TextUtils.equals(flagName, flag.getFlag())) {
+                    candidate = flag;
+                    break;
+                }
+            }
+        }
+        if (candidate == null) return null;
+        if (TextUtils.isEmpty(episodeUrl) || candidate.containsEpisodeUrl(Episode.create("", episodeUrl))) return candidate;
+        return null;
     }
 
     private Episode getEpisode() {
@@ -1574,6 +1639,10 @@ private boolean runtimeSourceOnly;
         mBinding.control.action.lut.setOnClickListener(guarded(this::onLut));
         mBinding.control.action.speed.setOnClickListener(guarded(this::onSpeed));
         mBinding.control.action.reset.setOnClickListener(guarded(this::onReset));
+        // 错误层的重试复用控制层同一条「重做本次播放」动作：onReset() 会按用户的「重置」
+        // 设置决定从头重播还是重新拉流，所以不新写播放路径，也就不会与既有的自动换源
+        // （startFlow）产生第二套恢复逻辑。重试成功后的收尾由 showProgress() 负责隐藏错误层。
+        mBinding.widget.retry.setOnClickListener(guarded(this::onReset));
         mBinding.control.action.title.setOnClickListener(guarded(this::onTitle));
         mBinding.control.action.player.setOnClickListener(guarded(this::onPlayerKernel));
         mBinding.control.action.player.setOnLongClickListener(view -> onPlayerKernelLong());
@@ -1651,7 +1720,7 @@ private boolean runtimeSourceOnly;
     private void setupIntroSkipConfirmListener() {
         mIntroSkipPlayback.setSkipConfirmListener((segment, action) -> {
             if (mIntroSkipConfirmDialog != null && mIntroSkipConfirmDialog.isShowing()) return false;
-            mIntroSkipConfirmDialog = new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            mIntroSkipConfirmDialog = new WebHtvAlertDialogBuilder(this)
                 .setTitle(R.string.intro_skip_confirm_title)
                 .setMessage(IntroSkipKinds.confirmMessage(segment))
                 .setPositiveButton(android.R.string.ok, (dialog, which) -> action.run())
@@ -2956,9 +3025,23 @@ private boolean runtimeSourceOnly;
     }
 
     private void setText(TextView view, int resId, String text) {
-        if (TextUtils.isEmpty(text) && !TextUtils.isEmpty(view.getText())) return;
+        if (TextUtils.isEmpty(text)) {
+            // 值缺失时必须清掉文本，不能只置 GONE：带标签的字段渲染出来的是
+            // getString(resId, "")，也就是 "导演：" 这种非空字符串，随后
+            // setVideoDetailsVisible() 按 !getText().isEmpty() 又把它翻回 VISIBLE，
+            // 于是详情页出现只有标签、没有内容的空行（用户截图所见）。
+            // 保留旧文本则会在换集后泄漏上一条目的元数据，同样靠清空消掉。
+            //
+            // resId == 0（remark）不走这条：它的文本可能由 TMDB 集数信息经另一条路径单独写入，
+            // 无条件清空会把那条路径的结果抹掉，因此保留原来的"空值不覆盖已有文本"语义。
+            if (resId > 0) {
+                if (!TextUtils.isEmpty(view.getText())) view.setText(null);
+                view.setVisibility(View.GONE);
+            }
+            return;
+        }
         String value = resId > 0 ? getString(resId, text) : text;
-        view.setVisibility(text.isEmpty() ? View.GONE : View.VISIBLE);
+        view.setVisibility(View.VISIBLE);
         if (TextUtils.equals(view.getText(), value)) return;
         view.setText(Sniffer.buildClickable(value, this::clickableSpan), TextView.BufferType.SPANNABLE);
         view.setLinkTextColor(MDColor.YELLOW_500);
@@ -3545,6 +3628,7 @@ private boolean runtimeSourceOnly;
         int oldPosition = mFlagAdapter.getSelectedPosition();
         mFlagAdapter.setSelected(resolved);
         if (mTmdbUIAdapter != null) mTmdbUIAdapter.setActiveFlag(resolved);
+        rememberFlagSelection(resolved);
         int newPosition = mFlagAdapter.getSelectedPosition();
         if (newPosition != RecyclerView.NO_POSITION) mBinding.flag.setSelectedPosition(newPosition);
         notifyItemsChanged(mBinding.flag, mFlagAdapter, oldPosition, newPosition);
@@ -3770,7 +3854,7 @@ private boolean runtimeSourceOnly;
     private void onQuality() {
         Result result = mViewModel.getPlayer().getValue();
         if (result == null || !result.getUrl().isMulti()) return;
-        new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+        new WebHtvAlertDialogBuilder(this)
                 .setTitle(R.string.detail_quality)
                 .setSingleChoiceItems(getQualityItems(result), result.getUrl().getPosition(), (dialog, which) -> {
                     dialog.dismiss();
@@ -5128,12 +5212,17 @@ private boolean runtimeSourceOnly;
     private void showError(String text) {
         mBinding.widget.error.setVisibility(View.VISIBLE);
         mBinding.widget.text.setText(text);
+        // 把焦点交给重试按钮：错误态下用户唯一能做的事就是重试，而播放页平时把焦点放在
+        // 视频面上（mBinding.video），浮层里的按钮靠方向键不一定走得过去。
+        mBinding.widget.retry.requestFocus();
         hideProgress();
     }
 
     private void hideError() {
         mBinding.widget.error.setVisibility(View.GONE);
         mBinding.widget.text.setText("");
+        // 只有焦点确实在重试按钮上时才交还视频面：否则会抢走别的控件（例如剧集网格）的焦点。
+        if (mBinding.widget.retry.hasFocus()) mBinding.video.requestFocus();
     }
 
     private void showInfo() {
