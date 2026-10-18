@@ -41,6 +41,14 @@
     <string name="keep">收藏</string>
     <string name="keep_add">已收藏</string>
     <string name="keep_del">已取消收藏</string>
+    <!-- 收藏页空态：设计文档 §9.9 要求「标题 + 解释 + 一个主动作」。 -->
+    <string name="keep_empty_title">还没有收藏</string>
+    <string name="keep_empty_description">在任意详情页按「收藏」，就会出现在这里。</string>
+    <string name="keep_empty_action">去点播</string>
+    <!-- 历史页空态：设计文档 §9.9 要求「标题 + 解释 + 一个主动作」。 -->
+    <string name="history_empty_title">还没有观看记录</string>
+    <string name="history_empty_description">播放过的内容会自动出现在这里，方便继续观看。</string>
+    <string name="history_empty_action">去点播</string>
     <string name="exit_confirm_title">退出应用</string>
     <string name="exit_confirm_message">应用将关闭，播放和后台服务也会停止。</string>
     <string name="exit_confirm_playing_message">当前正在播放；后台播放会继续播放，完全退出会停止播放和后台服务。</string>
@@ -172,6 +180,11 @@
     <string name="push">推送</string>
 
     <!-- Setting -->
+    <!-- TV 设置页的分组标题；此前 17 项平铺、无分组，只能整屏扫。 -->
+    <string name="setting_group_sources">内容源</string>
+    <string name="setting_group_playback">播放与内容</string>
+    <string name="setting_group_personal">个性化与智能</string>
+    <string name="setting_group_data">数据与网络</string>
     <string name="setting_vod">点播</string>
     <string name="setting_live">直播</string>
     <string name="setting_wall">壁纸</string>
@@ -1664,6 +1677,21 @@
 
     <!-- Error -->
     <string name="error_config_get">配置取得失败</string>
+    <!-- 内容源加载失败时的错误态：设计文档 §9.9 要求「错误色 + 原因 + 重试动作」。 -->
+    <string name="error_config_load">内容源加载失败</string>
+    <!-- 首页空态（确实没有内容，与"加载失败"是两件事）：设计文档 §9.9 的三件套。 -->
+    <string name="home_empty_title">暂时没有内容</string>
+    <string name="home_empty_description">内容源没有返回可显示的内容。</string>
+    <string name="home_empty_action">重新加载</string>
+    <!--
+        本地文件浏览器空态。主动作是**重新扫描当前目录**，不是"返回上级"——因为：
+        根目录没有上级（返回会退出页面），而"重新扫描"在任何目录都成立，
+        且能反映外部变化（刚用别的应用放进来的文件）。
+    -->
+    <string name="file_empty_title">这里没有内容</string>
+    <string name="file_empty_description">这个目录下没有可显示的项。如果是刚放进来的文件，重新扫描即可看到。</string>
+    <string name="file_empty_action">重新扫描</string>
+    <string name="error_retry">重试</string>
     <string name="error_play_next">已经是最后一集了！</string>
     <string name="error_play_prev">已经是第一集了！</string>
     <string name="error_play_parse">播放地址解析失败</string>
