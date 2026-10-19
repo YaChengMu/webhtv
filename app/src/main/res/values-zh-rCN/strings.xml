@@ -1684,6 +1684,14 @@
     <string name="home_empty_description">内容源没有返回可显示的内容。</string>
     <string name="home_empty_action">重新加载</string>
     <!--
+        「还没配接口」空态：重置应用、重装或恢复出厂后的首次启动就是这个状态。
+        它**不是失败**（没有地址可请求，也没有失败原因，重试永远不成功），所以标题不用
+        错误色、主动作也不是"重试"而是"添加接口"——直接把用户带到接口管理列表。
+    -->
+    <string name="home_no_config_title">还没有配置接口</string>
+    <string name="home_no_config_description">添加一个点播接口后即可浏览内容。</string>
+    <string name="home_no_config_action">添加接口</string>
+    <!--
         本地文件浏览器空态。主动作是**重新扫描当前目录**，不是"返回上级"——因为：
         根目录没有上级（返回会退出页面），而"重新扫描"在任何目录都成立，
         且能反映外部变化（刚用别的应用放进来的文件）。

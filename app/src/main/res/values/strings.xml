@@ -1729,6 +1729,15 @@
     <string name="home_empty_description">The content source returned no items.</string>
     <string name="home_empty_action">Reload</string>
     <!--
+        "No content source configured yet" empty state: the state right after an app reset,
+        a reinstall or a factory reset. It is **not a failure** (there is no address to request,
+        no failure reason, and retrying can never succeed), so the title is not error-colored and
+        the primary action is "Add source" rather than "Retry".
+    -->
+    <string name="home_no_config_title">No content source yet</string>
+    <string name="home_no_config_description">Add a VOD content source to start browsing.</string>
+    <string name="home_no_config_action">Add source</string>
+    <!--
         本地文件浏览器空态。主动作是**重新扫描当前目录**，不是"返回上级"——因为：
         根目录没有上级（返回会退出页面），而"重新扫描"在任何目录都成立，
         且能反映外部变化（刚用别的应用放进来的文件）。

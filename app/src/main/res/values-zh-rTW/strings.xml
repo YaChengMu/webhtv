@@ -1636,6 +1636,14 @@
     <string name="home_empty_description">內容源沒有回傳可顯示的內容。</string>
     <string name="home_empty_action">重新載入</string>
     <!--
+        「還沒設定接口」空態：重置應用、重新安裝或恢復出廠後首次啟動就是這個狀態。
+        它**不是失敗**（沒有網址可請求，也沒有失敗原因，重試永遠不會成功），所以標題不用
+        錯誤色、主動作也不是「重試」而是「新增接口」——直接把使用者帶到接口管理清單。
+    -->
+    <string name="home_no_config_title">還沒有設定接口</string>
+    <string name="home_no_config_description">新增一個點播接口後即可瀏覽內容。</string>
+    <string name="home_no_config_action">新增接口</string>
+    <!--
         本機檔案瀏覽器空態。主動作是**重新掃描目前目錄**，不是「返回上級」——因為：
         根目錄沒有上級（返回會離開頁面），而「重新掃描」在任何目錄都成立，
         且能反映外部變化（剛用其他應用放進來的檔案）。
