@@ -275,7 +275,9 @@
                         android:minWidth="112dp"
                         android:text="@string/sync_start"
                         android:textColor="@color/dialog_primary_button_text"
-                        app:backgroundTint="@color/dialog_primary_button_bg" />
+                        app:backgroundTint="@color/dialog_primary_button_bg"
+                        app:strokeWidth="@dimen/webhtv_focus_ring_width"
+                        app:strokeColor="@color/focus_ring_primary_container" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/modeButton"

@@ -1496,6 +1496,7 @@
     <string name="player_auto_play">点播自动播放</string>
     <string name="player_live_source_fallback">直播源失效自动切换</string>
     <string name="player_auto_change">自动换源</string>
+    <string name="player_defer_flag_switch">切换线路不自动播放</string>
     <string name="player_remember_brightness">记住播放亮度</string>
     <string name="player_failure_fallback">播放失败回退</string>
     <string name="player_speed">长按倍速</string>
