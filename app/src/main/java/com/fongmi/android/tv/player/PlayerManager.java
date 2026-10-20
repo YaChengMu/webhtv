@@ -1042,9 +1042,12 @@ public class PlayerManager implements ParseCallback {
      * `switch player type=…`、`switch decode decode=…`），无法回答“这次到底是为什么换的”。
      * 现在所有路径都经过这里，统一输出：
      * <ul>
-     *   <li>{@code kind=kernel|decode} 区分换内核与换软硬解；</li>
+     *   <li>{@code kind=kernel|decode|none} 区分换内核、换软硬解，以及两者都没变
+     *       （{@code none}：调用方只是想记一条原因，实际切换参数与当前一致）；</li>
      *   <li>{@code cause=} 机器可读原因（见各调用点）；</li>
-     *   <li>{@code chosen=} 是否用户显式选定，用于区分「用户选择」与「自动回退」；</li>
+     *   <li>{@code chosen=} 本次切换是否把用户选定的内核记为会话内核
+     *       （即是否执行 {@code PlayerSetting.putActivePlayer(type)}），
+     *       不是「是否由用户发起」——用户手动换软硬解时它是 {@code false}；</li>
      *   <li>{@code from/to} 同时给出内核名与软硬解，避免只看到其中一个维度。</li>
      * </ul>
      *
@@ -1895,10 +1898,16 @@ public void resetTrack(int type) {
 
     public void toggleDecode() {
         beginIjkRuntimeManualOverride();
+        int previousDecode = engine.getDecode();
         int next = engine.isHard() ? PlayerEngine.SOFT : PlayerEngine.HARD;
         boolean resetVideoSurface = playerType == PlayerSetting.EXO && next == PlayerEngine.HARD;
         hardDecodeSwitchRetryArmed = next == PlayerEngine.HARD;
         beginPlaybackTrace("switch-decode");
+        // The control bar's decode button is the primary manual soft/hard switch, so it must be
+        // attributable like every other switch. switchDecode(…) logs for the source-refresh path
+        // only; without this line the most common manual switch produced no switch-cause row at all.
+        logSwitchCause("decode", "user-choice", playerType, playerType,
+                previousDecode, next, false, getPosition());
         engine.setDecode(next);
         if (engine instanceof ExoPlayerEngine exo) {
             exo.prepareFrameSchedulingForNextPlayback();

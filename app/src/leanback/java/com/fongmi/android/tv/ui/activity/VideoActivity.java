@@ -105,6 +105,7 @@ import com.fongmi.android.tv.setting.MultiThreadProxySetting;
 import com.fongmi.android.tv.setting.PlaybackExperimentSetting;
 import com.fongmi.android.tv.setting.PreloadSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
+import com.fongmi.android.tv.setting.FlagSwitchPlaybackPolicy;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.setting.SiteHealthStore;
 import com.fongmi.android.tv.setting.DetailRuntimeModePolicy;
@@ -394,6 +395,8 @@ private boolean runtimeSourceOnly;
     private PartAdapter mPartAdapter;
     private BackdropAdapter mBackdropAdapter;
     private Map<String, View> mActionButtons;
+    private boolean mProgrammaticFlagSwitch;
+    private boolean mDeferFlagSwitchPlayback;
     private final List<View> mCustomActionViews = new ArrayList<>();
     private HorizontalScrollView mCustomPortraitButtons;
     private LinearLayout mCustomPortraitButtonRow;
@@ -3634,9 +3637,13 @@ private boolean runtimeSourceOnly;
         notifyItemsChanged(mBinding.flag, mFlagAdapter, oldPosition, newPosition);
         setEpisodeAdapter(resolved.getEpisodes());
         setQualityVisible(false);
+        boolean deferFlagSwitch = FlagSwitchPlaybackPolicy.shouldDeferPlayback(PlayerSetting.isDeferFlagSwitchPlayback(), mProgrammaticFlagSwitch);
+        mDeferFlagSwitchPlayback = deferFlagSwitch && !initialBinding;
         boolean episodeChanged = seamless(resolved);
         if (initialBinding && !episodeChanged) onRefresh();
+        else if (deferFlagSwitch && !episodeChanged) onRefresh();
         loadTmdbRelatedVideosForCurrentEpisode();
+        mDeferFlagSwitchPlayback = false;
     }
 
     private void setEpisodeAdapter(List<Episode> items) {
@@ -4863,6 +4870,10 @@ private boolean runtimeSourceOnly;
         mClock.setCallback(null);
         if (mFlagAdapter.getItemCount() == 0) return;
         if (mEpisodeAdapter.getItemCount() == 0) return;
+        if (mDeferFlagSwitchPlayback) {
+            mDeferFlagSwitchPlayback = false;
+            return;
+        }
         getPlayer(getFlag(), getEpisode());
     }
 
@@ -5411,7 +5422,9 @@ private boolean runtimeSourceOnly;
             setQualityVisible(false);
             if (mHistory.isRevSort()) reverseEpisode(true);
         } else {
+            mProgrammaticFlagSwitch = true;
             onItemClick(resolveHistoryPlaybackFlag(item.getFlags()));
+            mProgrammaticFlagSwitch = false;
             if (mHistory.isRevSort()) reverseEpisode(true);
         }
     }
@@ -5855,7 +5868,9 @@ private boolean runtimeSourceOnly;
             tmdbHistoryResumePending = true;
         }
         if (!targetFlag.isSelected() || !targetEpisode.isSelected()) {
+            mProgrammaticFlagSwitch = true;
             onItemClick(targetFlag);
+            mProgrammaticFlagSwitch = false;
             return;
         }
 
@@ -8070,7 +8085,9 @@ private boolean runtimeSourceOnly;
     private void nextFlag(int position) {
         Flag flag = mFlagAdapter.get(position + 1);
         Notify.show(getString(R.string.play_switch_flag, flag.getFlag()));
+        mProgrammaticFlagSwitch = true;
         onItemClick(flag);
+        mProgrammaticFlagSwitch = false;
     }
 
     private void nextSite() {

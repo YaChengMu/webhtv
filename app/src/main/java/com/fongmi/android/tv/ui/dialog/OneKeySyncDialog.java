@@ -23,6 +23,8 @@ import com.fongmi.android.tv.databinding.DialogOneKeySyncBinding;
 import com.fongmi.android.tv.remote.RemoteStore;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.theme.ThemeController;
+import com.fongmi.android.tv.theme.ThemeTokens;
 import com.fongmi.android.tv.ui.adapter.SyncDeviceAdapter;
 import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
 import com.fongmi.android.tv.utils.NsdDeviceDiscovery;
@@ -38,6 +40,7 @@ import com.fongmi.android.tv.utils.Task;
 import com.github.catvod.net.OkHttp;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
+import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.checkbox.MaterialCheckBox;
 
 import java.io.File;
@@ -111,7 +114,10 @@ public class OneKeySyncDialog extends BaseBottomSheetDialog implements SyncDevic
 
     @Override
     protected void initEvent() {
-        binding.modeButton.setOnClickListener(v -> toggleMode());
+        binding.directionGroup.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
+            if (!isChecked) return;
+            setToRemote(checkedId == R.id.directionPush);
+        });
         binding.refresh.setOnClickListener(v -> refresh());
         binding.changeDevice.setOnClickListener(v -> changeDevice());
         binding.selectAll.setOnClickListener(v -> toggleSelection());
@@ -166,9 +172,15 @@ public class OneKeySyncDialog extends BaseBottomSheetDialog implements SyncDevic
         setScanning(false);
     }
 
-    private void toggleMode() {
-        toRemote = !toRemote;
+    private void setToRemote(boolean value) {
+        if (toRemote == value) return;
+        toRemote = value;
         updateDirection();
+    }
+
+    private void updateDirectionGroup() {
+        int checked = toRemote ? R.id.directionPush : R.id.directionPull;
+        if (binding.directionGroup.getCheckedButtonId() != checked) binding.directionGroup.check(checked);
     }
 
     private void toggleSelection() {
@@ -258,7 +270,7 @@ public class OneKeySyncDialog extends BaseBottomSheetDialog implements SyncDevic
         binding.selected.setText(toRemote ? R.string.sync_mode_to_remote : R.string.sync_mode_from_remote);
         binding.mode.setText(toRemote ? R.string.sync_push : R.string.sync_pull);
         binding.mode.setCompoundDrawablesWithIntrinsicBounds(0, toRemote ? R.drawable.ic_sync_arrow_right_blue : R.drawable.ic_sync_arrow_left_blue, 0, 0);
-        binding.modeButton.setText(toRemote ? R.string.sync_push : R.string.sync_pull);
+        updateDirectionGroup();
         updateDirectionCard(binding.localCard, binding.localRole, toRemote);
         updateDirectionCard(binding.remoteCard, binding.remoteRole, !toRemote);
         binding.localRole.setText(toRemote ? R.string.sync_sender : R.string.sync_receiver);
@@ -269,11 +281,20 @@ public class OneKeySyncDialog extends BaseBottomSheetDialog implements SyncDevic
         binding.selectAll.setText(allSelected() ? R.string.sync_select_none : R.string.sync_select_all);
     }
 
-    private void updateDirectionCard(com.google.android.material.card.MaterialCardView card, TextView role, boolean sender) {
-        card.setCardBackgroundColor(Color.parseColor(sender ? "#E8F0FE" : "#F8FAFD"));
-        card.setStrokeColor(Color.TRANSPARENT);
-        card.setStrokeWidth(0);
-        role.setTextColor(Color.parseColor(sender ? "#174EA6" : "#5F6368"));
+    /**
+     * 高亮"发送方"卡片，另一张退回布局的静态样式。
+     *
+     * <p>颜色必须走主题 token，不能用裸 hex：布局里两张卡片本来就是
+     * {@code ?attr/colorSurfaceContainerLow} + {@code ?attr/colorOutlineVariant}，
+     * 用固定浅色 hex 覆盖会让深色/自定义主题下的方向卡仍是浅底深字。
+     * 这里用 M3 的成对语义色（容器色 + 其 on 色），对比度由主题契约保证。
+     */
+    private void updateDirectionCard(MaterialCardView card, TextView role, boolean sender) {
+        ThemeTokens tokens = ThemeController.current();
+        card.setCardBackgroundColor(sender ? tokens.colorPrimaryContainer() : tokens.colorSurfaceContainerLow());
+        card.setStrokeColor(sender ? Color.TRANSPARENT : tokens.colorOutlineVariant());
+        card.setStrokeWidth(sender ? 0 : ResUtil.dp2px(1));
+        role.setTextColor(sender ? tokens.colorOnPrimaryContainer() : tokens.colorOnSurfaceVariant());
     }
 
     @Override
@@ -328,6 +349,10 @@ public class OneKeySyncDialog extends BaseBottomSheetDialog implements SyncDevic
             return;
         }
         SyncOptions options = options();
+        // 方向必须在入口快照：toRemote 由主线程的方向选择器改写，而下面的工作线程要读它
+        // 决定请求体。若不快照，同步中切换方向会让 URL 的 mode 与请求体（backup/device）
+        // 指向相反方向。
+        final boolean toRemote = this.toRemote;
         String mode = toRemote ? "1" : "2";
         String url = String.format(Locale.getDefault(), "%s/action?do=sync&mode=%s&type=backup", selected.getIp(), mode);
         binding.start.setEnabled(false);
@@ -340,7 +365,7 @@ public class OneKeySyncDialog extends BaseBottomSheetDialog implements SyncDevic
                 SyncFiles.Archive archive = toRemote && SyncFiles.hasPaths(options) ? SyncFiles.createArchive(SyncFiles.getPaths(options), () -> syncing, this::onPrepareProgress) : null;
                 MpvConfigSync.Archive mpvArchive = toRemote && options.isMpvConfig() ? MpvConfigSync.createArchive() : null;
                 LoginStateSync.Archive loginArchive = toRemote && options.isLoginState() ? LoginStateSync.createArchive() : null;
-                RequestBody body = buildBody(options, archive, mpvArchive, loginArchive);
+                RequestBody body = buildBody(options, toRemote, archive, mpvArchive, loginArchive);
                 if (!syncing) {
                     if (archive != null) archive.delete();
                     if (mpvArchive != null) mpvArchive.delete();
@@ -359,7 +384,7 @@ public class OneKeySyncDialog extends BaseBottomSheetDialog implements SyncDevic
         });
     }
 
-    private RequestBody buildBody(SyncOptions options, SyncFiles.Archive archive, MpvConfigSync.Archive mpvArchive, LoginStateSync.Archive loginArchive) {
+    private RequestBody buildBody(SyncOptions options, boolean toRemote, SyncFiles.Archive archive, MpvConfigSync.Archive mpvArchive, LoginStateSync.Archive loginArchive) {
         if (archive == null && mpvArchive == null && loginArchive == null) {
             FormBody.Builder body = new FormBody.Builder();
             body.add("options", options.toString());
@@ -450,6 +475,11 @@ public class OneKeySyncDialog extends BaseBottomSheetDialog implements SyncDevic
         binding.progressBox.setVisibility(syncing ? View.VISIBLE : View.GONE);
         binding.start.setText(syncing ? R.string.sync_cancel : R.string.sync_start);
         binding.start.setEnabled(true);
+        // 同步中锁住方向：请求的方向已在 startSync 入口快照，此时翻方向不会改变
+        // 正在跑的这次同步，只会让界面显示的方向与实际请求相反。
+        // 注意 ViewGroup.setEnabled 不会传播到子 View，必须逐个按钮设。
+        binding.directionPush.setEnabled(!syncing);
+        binding.directionPull.setEnabled(!syncing);
         if (!syncing) {
             syncCall = null;
             binding.progress.setProgress(0);
