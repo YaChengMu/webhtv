@@ -322,8 +322,23 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
     }
 
     private void getLive() {
-        mViewModel.parse(getHome());
+        Live live = getHome();
+        setSource(live);
+        mViewModel.parse(live);
         showProgress();
+    }
+
+    /**
+     * 控制栏的「直播源」按钮显示当前直播源名称：固定写「直播源」看不出此刻播的是哪一路源，
+     * 用户换源（含失效自动换源）都会重新走 {@link #getLive()} 刷新。名称为空时回退原文案。
+     * 按钮文案被源名取代后读屏会只剩一个孤立的源名，因此同步补回「直播源」动作语义。
+     */
+    private void setSource(Live live) {
+        String name = live == null ? "" : live.getName();
+        boolean named = !name.isEmpty();
+        String label = named ? name : getString(R.string.live_control_source);
+        mBinding.control.action.source.setText(label);
+        mBinding.control.action.source.setContentDescription(named ? getString(R.string.live_control_source_named, name) : null);
     }
 
     private void renderLive(Live live) {
