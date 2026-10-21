@@ -13,6 +13,7 @@
     <string name="live_refresh">刷新</string>
     <string name="live_line">线路 <xliff:g name="name">%s</xliff:g></string>
     <string name="live_control_source">直播源</string>
+    <string name="live_control_source_named">直播源：<xliff:g name="name">%s</xliff:g></string>
 
     <!-- Detail -->
     <string name="detail_title"><xliff:g name="name">%s</xliff:g>：<xliff:g name="name">%s</xliff:g></string>
@@ -1686,8 +1687,9 @@
     <string name="home_empty_action">重新加载</string>
     <!--
         「还没配接口」空态：重置应用、重装或恢复出厂后的首次启动就是这个状态。
-        它**不是失败**（没有地址可请求，也没有失败原因，重试永远不成功），所以标题不用
-        错误色、主动作也不是"重试"而是"添加接口"——直接把用户带到接口管理列表。
+        它**不是失败**（没有地址可请求，也没有失败原因，重试永远不成功），所以标题不用错误色。
+        注意：无配置时首页已不再用这条空态接管（见 docs/HOME-NO-CONFIG-NAV-20261020.md），
+        这三条当前**没有 `R.string` 引用**，只是为了将来可能复用的独立说明卡而保留。
     -->
     <string name="home_no_config_title">还没有配置接口</string>
     <string name="home_no_config_description">添加一个点播接口后即可浏览内容。</string>

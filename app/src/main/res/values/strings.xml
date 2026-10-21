@@ -13,6 +13,7 @@
     <string name="live_refresh">Refresh</string>
     <string name="live_line">Line <xliff:g name="name">%s</xliff:g></string>
     <string name="live_control_source">Live source</string>
+    <string name="live_control_source_named">Live source: <xliff:g name="name">%s</xliff:g></string>
     <string name="live_no_epg">00:00 - 23:59 No program info</string>
 
     <!-- Detail -->

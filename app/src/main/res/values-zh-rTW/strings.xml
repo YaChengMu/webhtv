@@ -13,6 +13,7 @@
     <string name="live_refresh">刷新</string>
     <string name="live_line">來源 <xliff:g name="name">%s</xliff:g></string>
     <string name="live_control_source">直播源</string>
+    <string name="live_control_source_named">直播源：<xliff:g name="name">%s</xliff:g></string>
 
     <!-- Detail -->
     <string name="detail_title"><xliff:g name="name">%s</xliff:g>：<xliff:g name="name">%s</xliff:g></string>

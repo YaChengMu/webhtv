@@ -21,6 +21,9 @@
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/source"
             style="@style/Control"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:maxWidth="160dp"
             android:text="@string/live_control_source" />
 
         <com.google.android.material.textview.MaterialTextView

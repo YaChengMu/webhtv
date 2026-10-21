@@ -27,6 +27,70 @@ public class LiveActivityLayoutTest {
     }
 
     @Test
+    public void liveControlSourceButtonShowsTheCurrentLiveSourceName() throws Exception {
+        assertLiveSourceLabelFollowsHome(findMobileJavaPath());
+        assertLiveSourceLabelFollowsHome(findLeanbackJavaPath());
+    }
+
+    private static void assertLiveSourceLabelFollowsHome(Path javaRoot) throws Exception {
+        Path sourcePath = javaRoot.resolve(Path.of(
+                "com", "fongmi", "android", "tv", "ui", "activity", "LiveActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        String getLiveBody = section(source, "private void getLive()", "private void setSource(Live live)");
+        String setSourceBody = section(source, "private void setSource(Live live)", "private void renderLive(Live live)");
+
+        assertFalse(sourcePath + " is missing getLive", getLiveBody.isEmpty());
+        assertTrue("every live load (including a source switch and the automatic fallback) must refresh the control bar label",
+                getLiveBody.contains("setSource(live);"));
+        assertTrue("the control bar source button must show the current live source name and fall back to its own label when the name is empty",
+                setSourceBody.contains("boolean named = !name.isEmpty();")
+                        && setSourceBody.contains("String label = named ? name : getString(R.string.live_control_source);")
+                        && setSourceBody.contains("mBinding.control.action.source.setText(label);"));
+        assertTrue("replacing the label with a bare source name must not drop the switch-source meaning for screen readers",
+                setSourceBody.contains("mBinding.control.action.source.setContentDescription(named ? getString(R.string.live_control_source_named, name) : null);"));
+    }
+
+    @Test
+    public void liveControlSourceChipClampsLongSourceNames() throws Exception {
+        assertSourceChipIsClamped(findMobileJavaPath(), "160dp");
+        assertSourceChipIsClamped(findLeanbackJavaPath(), "240dp");
+    }
+
+    private static void assertSourceChipIsClamped(Path javaRoot, String maxWidth) throws Exception {
+        Path layoutPath = javaRoot.getParent().resolve(Path.of("res", "layout", "view_control_live_action.xml"));
+        String layout = new String(Files.readAllBytes(layoutPath), StandardCharsets.UTF_8);
+        int id = layout.indexOf("android:id=\"@+id/source\"");
+        int tagStart = id < 0 ? -1 : layout.lastIndexOf("<com.google.android.material.textview.MaterialTextView", id);
+        int tagEnd = id < 0 ? -1 : layout.indexOf("/>", id);
+        String chip = tagStart >= 0 && tagEnd > tagStart ? layout.substring(tagStart, tagEnd) : "";
+
+        assertFalse(layoutPath + " is missing the live source chip", chip.isEmpty());
+        assertTrue("a user-defined live source name must stay on one line and ellipsize instead of expanding the action row",
+                chip.contains("android:maxLines=\"1\"") && chip.contains("android:ellipsize=\"end\""));
+        assertTrue("the live source chip must cap its width so a long source name cannot crowd the primary live actions",
+                chip.contains("android:maxWidth=\"" + maxWidth + "\""));
+    }
+
+    @Test
+    public void liveControlSheetMirrorsTheCurrentLiveSourceName() throws Exception {
+        Path sourcePath = findMobileJavaPath().resolve(Path.of(
+                "com", "fongmi", "android", "tv", "ui", "dialog", "LiveControlDialog.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        String initViewBody = section(source, "protected void initView()", "protected void initEvent()");
+        String setPlayerBody = section(source, "public void setPlayer()", "private void setScale(int mode)");
+
+        assertFalse(sourcePath + " is missing initView", initViewBody.isEmpty());
+        assertTrue("the control sheet must open with the current live source name",
+                initViewBody.contains("binding.source.setText(parent.control.action.source.getText());"));
+        assertTrue("the control sheet must open with the current live source accessibility label",
+                initViewBody.contains("binding.source.setContentDescription(parent.control.action.source.getContentDescription());"));
+        assertTrue("an open control sheet must follow a live source switch",
+                setPlayerBody.contains("binding.source.setText(parent.control.action.source.getText());"));
+        assertTrue("an open control sheet must follow a live source switch for screen readers too",
+                setPlayerBody.contains("binding.source.setContentDescription(parent.control.action.source.getContentDescription());"));
+    }
+
+    @Test
     public void explicitLivePiPPreparesVideoBeforeEnteringSystemPiP() throws Exception {
         Path sourcePath = findMobileJavaPath().resolve(Path.of(
                 "com", "fongmi", "android", "tv", "ui", "activity", "LiveActivity.java"));
