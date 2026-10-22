@@ -35,6 +35,7 @@ public class PlaybackAnalyticsListener implements AnalyticsListener, VideoFrameM
     private static volatile long totalDroppedFrames;
     private static volatile long lastBandwidthLogMs;
     private static volatile long lastMediaEstimateLogMs;
+    private static volatile long lastFrameTimingLogMs;
     private static volatile boolean loading;
     private static volatile boolean frameSchedulingExperimentActive;
     private static volatile long seekSequence;
@@ -54,6 +55,7 @@ public class PlaybackAnalyticsListener implements AnalyticsListener, VideoFrameM
             ForwardBufferTrend.Snapshot.unknown();
     private static final long BANDWIDTH_LOG_INTERVAL_MS = 5_000;
     private static final long MEDIA_ESTIMATE_LOG_INTERVAL_MS = 10_000;
+    private static final long FRAME_TIMING_LOG_INTERVAL_MS = 30_000;
     private static final long LOADING_LOG_INTERVAL_MS = 5_000;
     private static final long LOW_BUFFER_LOADING_LOG_INTERVAL_MS = 1_000;
     private static final long LOW_BUFFER_LOG_THRESHOLD_MS = 8_000;
@@ -228,6 +230,7 @@ public class PlaybackAnalyticsListener implements AnalyticsListener, VideoFrameM
         totalDroppedFrames = 0;
         lastBandwidthLogMs = 0;
         lastMediaEstimateLogMs = 0;
+        lastFrameTimingLogMs = 0;
         loading = false;
         frameSchedulingExperimentActive = false;
         activeSeekSequence = 0;
@@ -509,10 +512,44 @@ public class PlaybackAnalyticsListener implements AnalyticsListener, VideoFrameM
 
     @Override
     public void onVideoFrameProcessingOffset(EventTime eventTime, long totalProcessingOffsetUs, int frameCount) {
+        // The per-frame lateness distribution is the one measurement that separates 「跳帧」 from
+        // 「顿住」: media3 reports one sample per processed frame (rendered, skipped or dropped),
+        // positive = processed early enough, negative = the position had already passed it.
+        // It used to be collected only for devices enrolled in the A/B experiment, so an ordinary
+        // dropped-frame report could not answer "how late were the frames". Collect it whenever
+        // diagnostics are on as well; the buckets cost a few adds per sample, and release builds
+        // keep the previous behaviour.
         FRAME_TIMING_METRICS.observeProcessingOffset(
                 totalProcessingOffsetUs,
                 frameCount,
-                frameSchedulingExperimentActive);
+                frameSchedulingExperimentActive || SpiderDebug.isEnabled());
+        logFrameTimingIfDue();
+    }
+
+    /**
+     * Emits the accumulated frame-lateness histogram at most once per interval.
+     *
+     * <p>media3 reports the processing offset only from {@code MediaCodecVideoRenderer.onStopped()},
+     * i.e. once per renderer stop — not per frame. Stop-only delivery would leave a report exported
+     * mid-playback with no histogram at all, so the collector's existing 5-second tick calls this
+     * too (still throttled). No extra timer, no extra thread.
+     */
+    static void logFrameTimingIfDue() {
+        if (!SpiderDebug.isEnabled()) return;
+        long now = nowElapsed();
+        if (now - lastFrameTimingLogMs < FRAME_TIMING_LOG_INTERVAL_MS) return;
+        ExoFrameTimingMetrics.Snapshot timing = FRAME_TIMING_METRICS.snapshot();
+        if (timing.frameCount() <= 0) return;
+        lastFrameTimingLogMs = now;
+        PlaybackTrace.log(
+                "exo-frame-timing",
+                playbackTraceId,
+                "frames=%d avgOffsetMs=%d lateBatches=%d codecErrors=%d offsetBucketsUs=%s metricScope=buckets=<-20ms/-20..0/0..20/20..50/50..75/75..100/>=100ms; positive=early, negative=position-passed-the-frame; renderer-side only",
+                timing.frameCount(),
+                timing.averageOffsetUs() / 1_000L,
+                timing.lateBatchCount(),
+                timing.codecErrorCount(),
+                timing.processingOffsetBuckets().compact());
     }
 
     @Override

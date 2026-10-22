@@ -1060,6 +1060,7 @@
     <string name="cache_cleanup_failed">缓存清理失败</string>
     <string name="cache_cleanup_cancelled">缓存清理已取消</string>
     <string name="cache_cleanup_full_started">正在清理全部缓存…</string>
+    <string name="cache_cleanup_busy">正在清理，请稍候</string>
     <string name="cache_module_exo">Exo 播放缓存</string>
     <string name="cache_module_mpv_hls">MPV HLS/ISO 分片</string>
     <string name="cache_module_mpv_demuxer">MPV demuxer 预载</string>
@@ -1815,6 +1816,15 @@
     <string name="crash_details_title">错误信息</string>
     <string name="crash_details_message">应用版本：%1$s\n\n%2$s</string>
     <string name="crash_details_close">关闭</string>
+    <string name="crash_log_title">日志下载地址</string>
+    <string name="crash_log_hint">用同一局域网内的手机或电脑浏览器打开上面的地址，即可查看并下载本次崩溃日志。</string>
+    <string name="crash_log_preparing">正在准备日志服务…</string>
+    <string name="crash_log_unavailable">日志服务未启动，可点按「错误信息」查看堆栈。</string>
+    <string name="crash_log_no_lan">当前没有局域网地址（未连接网络？），只能在本机打开：\n%1$s</string>
+    <string name="crash_log_service_failed">日志服务未启动</string>
+    <string name="crash_log_copy">复制地址</string>
+    <string name="crash_log_copied">地址已复制</string>
+    <string name="crash_log_open">在浏览器打开</string>
 
     <!-- Hint -->
     <string name="copied">已复制</string>
@@ -1928,6 +1938,7 @@
     <string-array name="select_fullscreen_menu_key">
         <item>控制栏</item>
         <item>选集</item>
+        <item>下一集</item>
     </string-array>
 
     <string-array name="select_home_menu_key">

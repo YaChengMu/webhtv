@@ -4591,6 +4591,17 @@ private boolean runtimeSourceOnly;
                 .seasons(getEpisodeDialogSeasons(), getEpisodeDialogSeasonCounts()).show(this);
     }
 
+    /**
+     * 全屏菜单键=下一集：与底栏「下一集」按钮、片尾自动续播共用 checkNext()，
+     * 倒序播放时由 checkNext() 自动改取上一集。无详情/无分集时静默忽略，
+     * 避免 getFlag() 为空或空分集被当成真实剧集切走。
+     */
+    private void onMenuNextEpisode() {
+        Flag flag = getFlag();
+        if (flag == null || flag.getEpisodes().isEmpty()) return;
+        checkNext();
+    }
+
     private java.util.List<Integer> getEpisodeDialogSeasons() {
         return new java.util.ArrayList<>(getEpisodeDialogSeasonCounts().keySet());
     }
@@ -8278,7 +8289,9 @@ private boolean runtimeSourceOnly;
         }
         if (isVisible(mBinding.lutQuick)) return dispatchLutQuickKey(event);
         if (isFullscreen() && KeyUtil.isMenuKey(event)) {
-            if (Setting.getFullscreenMenuKey() == 1) onEpisodes();
+            int menuKey = Setting.getFullscreenMenuKey();
+            if (menuKey == Setting.FULLSCREEN_MENU_KEY_EPISODES) onEpisodes();
+            else if (menuKey == Setting.FULLSCREEN_MENU_KEY_NEXT_EPISODE) onMenuNextEpisode();
             else onToggle();
         }
         if (isVisible(mBinding.control.getRoot())) {

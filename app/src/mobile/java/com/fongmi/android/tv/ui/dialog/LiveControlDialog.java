@@ -87,6 +87,7 @@ public class LiveControlDialog extends BaseBottomSheetDialog {
         binding.invert.setSelected(parent.control.action.invert.isSelected());
         binding.across.setSelected(parent.control.action.across.isSelected());
         binding.change.setSelected(parent.control.action.change.isSelected());
+        syncConfiguredButtonVisibility();
         setTrackVisible();
         setListStyleSelected();
         setScaleText();
@@ -188,7 +189,17 @@ public class LiveControlDialog extends BaseBottomSheetDialog {
         binding.source.setText(parent.control.action.source.getText());
         binding.source.setContentDescription(parent.control.action.source.getContentDescription());
         binding.playParams.setSelected(parent.control.action.playParams.isSelected());
+        syncConfiguredButtonVisibility();
         setTrackVisible();
+    }
+
+    /**
+     * 面板与底部动作栏保持一致：用户在「播放器按钮」里关掉的直播同名按钮，面板内也不再出现。
+     */
+    private void syncConfiguredButtonVisibility() {
+        binding.player.setVisibility(parent.control.action.player.getVisibility());
+        binding.decode.setVisibility(parent.control.action.decode.getVisibility());
+        binding.playParams.setVisibility(parent.control.action.playParams.getVisibility());
     }
 
     private void setScale(int mode) {
