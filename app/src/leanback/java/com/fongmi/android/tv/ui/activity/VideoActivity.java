@@ -107,6 +107,7 @@ import com.fongmi.android.tv.setting.PreloadSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.FlagSwitchPlaybackPolicy;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.theme.PlaybackMenuScrim;
 import com.fongmi.android.tv.setting.SiteHealthStore;
 import com.fongmi.android.tv.setting.DetailRuntimeModePolicy;
 import com.fongmi.android.tv.setting.TmdbSitePolicy;
@@ -1580,7 +1581,8 @@ private boolean runtimeSourceOnly;
     }
 
     private void applyPlaybackOverlay() {
-        mBinding.control.getRoot().setBackgroundResource(Setting.isPlaybackOverlayEnabled() ? R.drawable.shape_controller_scrim : R.color.transparent);
+        if (Setting.isPlaybackOverlayEnabled()) mBinding.control.getRoot().setBackground(PlaybackMenuScrim.create(this));
+        else mBinding.control.getRoot().setBackgroundResource(R.color.transparent);
     }
 
     /**

@@ -1178,6 +1178,12 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     }
 
     @Override
+    public void onLongPress(Class item) {
+        if (item == null || item.isHome() || !isCurrentCategory(item)) return;
+        mFolder.resetFilter();
+    }
+
+    @Override
     public void onItemClick(Vod item) {
         if (item.isAction()) com.fongmi.android.tv.content.ActionCardHelper.handleAction(this, getHome().getKey(), item.getAction());
         else if (getHome().isIndex()) CollectActivity.start(this, item.getName());
