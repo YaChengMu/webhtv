@@ -958,6 +958,7 @@
     <string name="theme_editor_slot_scrim_opacity">遮罩透明度</string>
     <string name="theme_editor_slot_dialog_opacity">对话框透明度</string>
     <string name="theme_editor_slot_overlay_opacity">浮层透明度（仅 Web 主题生效）</string>
+    <string name="theme_editor_slot_player_scrim_opacity">播放菜单遮盖层不透明度</string>
     <string name="theme_editor_import">导入配色</string>
     <string name="theme_editor_palette_style">配色风格 · 保留手动修改</string>
     <string name="theme_editor_palette_tonal">柔和</string>
@@ -1060,6 +1061,7 @@
     <string name="cache_cleanup_failed">缓存清理失败</string>
     <string name="cache_cleanup_cancelled">缓存清理已取消</string>
     <string name="cache_cleanup_full_started">正在清理全部缓存…</string>
+    <string name="cache_cleanup_busy">正在清理，请稍候</string>
     <string name="cache_module_exo">Exo 播放缓存</string>
     <string name="cache_module_mpv_hls">MPV HLS/ISO 分片</string>
     <string name="cache_module_mpv_demuxer">MPV demuxer 预载</string>
@@ -1815,6 +1817,15 @@
     <string name="crash_details_title">错误信息</string>
     <string name="crash_details_message">应用版本：%1$s\n\n%2$s</string>
     <string name="crash_details_close">关闭</string>
+    <string name="crash_log_title">日志下载地址</string>
+    <string name="crash_log_hint">用同一局域网内的手机或电脑浏览器打开上面的地址，即可查看并下载本次崩溃日志。</string>
+    <string name="crash_log_preparing">正在准备日志服务…</string>
+    <string name="crash_log_unavailable">日志服务未启动，可点按「错误信息」查看堆栈。</string>
+    <string name="crash_log_no_lan">当前没有局域网地址（未连接网络？），只能在本机打开：\n%1$s</string>
+    <string name="crash_log_service_failed">日志服务未启动</string>
+    <string name="crash_log_copy">复制地址</string>
+    <string name="crash_log_copied">地址已复制</string>
+    <string name="crash_log_open">在浏览器打开</string>
 
     <!-- Hint -->
     <string name="copied">已复制</string>
@@ -1928,6 +1939,7 @@
     <string-array name="select_fullscreen_menu_key">
         <item>控制栏</item>
         <item>选集</item>
+        <item>下一集</item>
     </string-array>
 
     <string-array name="select_home_menu_key">
@@ -2100,6 +2112,7 @@
         <item>@string/display_mini</item>
         <item>@string/display_title</item>
         <item>播放参数</item>
+        <item>@string/display_media_badges</item>
     </string-array>
 
     <string-array name="select_live_player_osd">
@@ -2303,6 +2316,14 @@
     <string name="display_progress">进度</string>
     <string name="display_mini">迷你</string>
     <string name="display_title">标题</string>
+    <string name="display_media_badges">媒体信息</string>
+    <string name="osd_media_badge_position">媒体信息位置</string>
+    <string-array name="select_media_badge_position">
+        <item>左上角</item>
+        <item>右上角</item>
+        <item>左下角</item>
+        <item>右下角</item>
+    </string-array>
     <string name="play_decode_idle">解码</string>
     <string name="detail_close">关闭</string>
     <string name="detail_expand">展开</string>

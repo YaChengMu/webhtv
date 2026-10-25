@@ -6,7 +6,9 @@
     android:fillViewport="true"
     android:scrollbars="none">
 
+    <!-- container 供 PlayerButtonSetting.applyOrder 重排播放器按钮，直播专属按钮（配置/OSD设置/直播源等）不登记。 -->
     <androidx.appcompat.widget.LinearLayoutCompat
+        android:id="@+id/container"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
