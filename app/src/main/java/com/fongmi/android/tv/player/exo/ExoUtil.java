@@ -1220,6 +1220,26 @@ public class ExoUtil {
                         dolbyVisionPlaybackState));
             } catch (Throwable ignored) {
             }
+            // Plain HDR10 (non-DV) HEVC is often rejected by the vendor codec descriptor
+            // (conservative profile/level or missing HDR color caps), so Media3 silently
+            // falls back to the FFmpeg software renderer and drops frames on 4K HDR10.
+            // Normalize the format (drop the codecs string, pin BT.2020/ST2084) so the
+            // hardware HEVC decoder is actually selected; decoder fallback keeps FFmpeg as a
+            // graceful last resort if the hardware path truly cannot configure.
+            if (videoRenderMode != EXTENSION_RENDERER_MODE_PREFER) {
+                try {
+                    out.add(new Hdr10HevcFallbackRenderer(
+                            context,
+                            getCodecAdapterFactory(),
+                            videoCodecSelector,
+                            allowedVideoJoiningTimeMs,
+                            enableDecoderFallback,
+                            eventHandler,
+                            eventListener,
+                            frameSchedulingDecision));
+                } catch (Throwable ignored) {
+                }
+            }
             // Video decode mode is explicit for extension renderers: with 「解码器兜底」 on, hardware
             // mode keeps the system MediaCodec renderers first and only appends FFmpeg afterwards,
             // so a codec without any platform decoder (AVS2/AVS3, unsupported HEVC profiles) still
@@ -1348,6 +1368,60 @@ public class ExoUtil {
                     ? new ColorInfo.Builder().setColorSpace(C.COLOR_SPACE_BT2020).setColorRange(C.COLOR_RANGE_LIMITED).setColorTransfer(C.COLOR_TRANSFER_ST2084).build()
                     : format.colorInfo.buildUpon().setColorSpace(C.COLOR_SPACE_BT2020).setColorRange(C.COLOR_RANGE_LIMITED).setColorTransfer(C.COLOR_TRANSFER_ST2084).build();
             return format.buildUpon().setSampleMimeType(MimeTypes.VIDEO_H265).setCodecs(null).setColorInfo(color).build();
+        }
+    }
+
+    private static final class Hdr10HevcFallbackRenderer extends MediaCodecVideoRenderer {
+        Hdr10HevcFallbackRenderer(Context context, MediaCodecAdapter.Factory factory, MediaCodecSelector selector, long joiningMs, boolean decoderFallback, Handler handler, VideoRendererEventListener listener, ExoFrameSchedulingExperimentPolicy.Decision frameSchedulingDecision) {
+            super(ExoFrameSchedulingRendererSettings.from(frameSchedulingDecision)
+                    .apply(new Builder(context)
+                            .setCodecAdapterFactory(factory)
+                            .setMediaCodecSelector(selector)
+                            .setAllowedJoiningTimeMs(joiningMs)
+                            .setEnableDecoderFallback(decoderFallback)
+                            .setEventHandler(handler)
+                            .setEventListener(listener)
+                            .setMaxDroppedFramesToNotify(DefaultRenderersFactory.MAX_DROPPED_VIDEO_FRAME_COUNT_TO_NOTIFY)));
+        }
+
+        @Override public String getName() { return "MediaCodecVideoRenderer-HDR10-HEVC"; }
+
+        @Override
+        protected int supportsFormat(MediaCodecSelector selector, Format format) throws androidx.media3.exoplayer.mediacodec.MediaCodecUtil.DecoderQueryException {
+            if (!shouldUseHdr10HevcFallback(format)) return C.FORMAT_UNSUPPORTED_TYPE;
+            int support = super.supportsFormat(selector, asHdr10(format));
+            if (SpiderDebug.isEnabled()) SpiderDebug.log("exo-hdr", "HDR10 HEVC fallback support=%d size=%dx%d transfer=%s", support, format.width, format.height, colorTransferName(format.colorInfo));
+            return support;
+        }
+
+        @Override
+        protected List<MediaCodecInfo> getDecoderInfos(MediaCodecSelector selector, Format format, boolean secure) throws androidx.media3.exoplayer.mediacodec.MediaCodecUtil.DecoderQueryException {
+            if (!shouldUseHdr10HevcFallback(format)) return List.of();
+            return super.getDecoderInfos(selector, asHdr10(format), secure);
+        }
+
+        @Override
+        protected MediaCodecAdapter.Configuration getMediaCodecConfiguration(MediaCodecInfo info, Format format, MediaCrypto crypto, float rate) {
+            return super.getMediaCodecConfiguration(info, asHdr10(format), crypto, rate);
+        }
+
+        private static boolean shouldUseHdr10HevcFallback(Format format) {
+            return format != null
+                    && MimeTypes.VIDEO_H265.equals(format.sampleMimeType)
+                    && format.colorInfo != null
+                    && format.colorInfo.colorTransfer == C.COLOR_TRANSFER_ST2084;
+        }
+
+        private static Format asHdr10(Format format) {
+            ColorInfo color = format.colorInfo == null
+                    ? new ColorInfo.Builder().setColorSpace(C.COLOR_SPACE_BT2020).setColorRange(C.COLOR_RANGE_LIMITED).setColorTransfer(C.COLOR_TRANSFER_ST2084).build()
+                    : format.colorInfo.buildUpon().setColorSpace(C.COLOR_SPACE_BT2020).setColorRange(C.COLOR_RANGE_LIMITED).setColorTransfer(C.COLOR_TRANSFER_ST2084).build();
+            return format.buildUpon().setSampleMimeType(MimeTypes.VIDEO_H265).setCodecs(null).setColorInfo(color).build();
+        }
+
+        private static String colorTransferName(ColorInfo ci) {
+            if (ci == null) return "n/a";
+            return ci.colorTransfer == C.COLOR_TRANSFER_ST2084 ? "HDR10/ST2084" : "tf=" + ci.colorTransfer;
         }
     }
 
