@@ -112,6 +112,7 @@ public class ExoPlayerEngine implements PlayerEngine {
     private long hdrDiagLastDropped;
     private long hdrDiagLastTickMs;
     private final Runnable hdrDiagRunnable = this::tickHdrDiagnostics;
+    private boolean videoEffectsActive;
     private boolean firstFrameRendered;
     private boolean decoderRuntimeStableScheduled;
     private final Player.Listener tunnelingWatchdogListener = new Player.Listener() {
@@ -505,12 +506,7 @@ public class ExoPlayerEngine implements PlayerEngine {
         hdrDiagLastTickMs = now;
         String decoder = v.decoderName();
         boolean soft = isSoftDecoderName(decoder);
-        int effectCount = -1;
-        try {
-            List<Effect> effects = player.getVideoEffects();
-            effectCount = effects == null ? -1 : effects.size();
-        } catch (Throwable ignored) {
-        }
+        int effectCount = videoEffectsActive ? 1 : 0;
         String hwSupport = "";
         if ("start".equals(phase) && vf != null) {
             try {
@@ -561,8 +557,6 @@ public class ExoPlayerEngine implements PlayerEngine {
                 return "LINEAR";
             case C.COLOR_TRANSFER_GAMMA_2_2:
                 return "GAMMA2.2";
-            case C.COLOR_TRANSFER_BT709:
-                return "BT709";
             case C.COLOR_TRANSFER_SRGB:
                 return "SRGB";
             default:
@@ -927,6 +921,7 @@ public class ExoPlayerEngine implements PlayerEngine {
                     format == null ? "unknown" : format.width + "x" + format.height + "/" + format.sampleMimeType);
         }
         player.setVideoEffects(effects);
+        videoEffectsActive = effects != null && !effects.isEmpty();
         com.fongmi.android.tv.player.exo.ExoDiagnosticCollector.effects(player, effects);
     }
 

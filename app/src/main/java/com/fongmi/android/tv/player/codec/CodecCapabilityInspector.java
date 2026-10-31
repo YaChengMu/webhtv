@@ -421,7 +421,7 @@ public final class CodecCapabilityInspector {
         return names;
     }
 
-    private static String formatSupport(Context context, Format format) {
+    public static String formatSupport(Context context, Format format) {
         String mime = getSampleMimeType(format);
         if (TextUtils.isEmpty(mime)) return "无法识别 MIME，codecs=" + empty(format == null ? null : format.codecs);
         boolean audio = mime.startsWith("audio/");
