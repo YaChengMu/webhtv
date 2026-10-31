@@ -5,7 +5,6 @@ import android.media.MediaCodecList;
 import android.os.Build;
 
 import androidx.media3.common.C;
-import androidx.media3.common.ColorInfo;
 import androidx.media3.common.Effect;
 import androidx.media3.common.Format;
 import androidx.media3.common.MediaEdition;
@@ -21,13 +20,11 @@ import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.MediaSource;
 
 import com.fongmi.android.tv.App;
-import com.fongmi.android.tv.BuildConfig;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.Track;
 import com.fongmi.android.tv.player.AudioPlaybackDiagnostics;
 import com.fongmi.android.tv.player.PlaybackTrace;
 import com.fongmi.android.tv.player.PlaybackResourceClassifier;
-import com.fongmi.android.tv.player.codec.CodecCapabilityInspector;
 import com.fongmi.android.tv.player.audio.PlaybackMediaClock;
 import com.fongmi.android.tv.player.audio.PlaybackMediaSignalHub;
 import com.fongmi.android.tv.player.exo.ErrorMsgProvider;
@@ -108,11 +105,6 @@ public class ExoPlayerEngine implements PlayerEngine {
     private final Runnable tunnelingWatchdogRunnable = this::onTunnelingWatchdogTimeout;
     private final Runnable tunnelingProgressWatchdogRunnable = this::checkTunnelingProgress;
     private final Runnable decoderRuntimeStableRunnable = this::onDecoderRuntimeStable;
-    private static final String HDR_DIAG_TAG = "exo-video-hdr";
-    private long hdrDiagLastDropped;
-    private long hdrDiagLastTickMs;
-    private final Runnable hdrDiagRunnable = this::tickHdrDiagnostics;
-    private boolean videoEffectsActive;
     private boolean firstFrameRendered;
     private boolean decoderRuntimeStableScheduled;
     private final Player.Listener tunnelingWatchdogListener = new Player.Listener() {
@@ -124,7 +116,6 @@ public class ExoPlayerEngine implements PlayerEngine {
             App.removeCallbacks(tunnelingWatchdogRunnable);
             if (player.isPlaying()) armTunnelingProgressWatchdog();
             armDecoderRuntimeStableWindow();
-            startHdrDiagnostics();
         }
 
         @Override
@@ -133,11 +124,9 @@ public class ExoPlayerEngine implements PlayerEngine {
             if (isPlaying && firstFrameRendered) {
                 armTunnelingProgressWatchdog();
                 armDecoderRuntimeStableWindow();
-                startHdrDiagnostics();
             } else if (!isPlaying) {
                 cancelTunnelingProgressWatchdog();
                 cancelDecoderRuntimeStableWindow();
-                stopHdrDiagnostics();
             }
         }
 
@@ -168,7 +157,6 @@ public class ExoPlayerEngine implements PlayerEngine {
             App.removeCallbacks(tunnelingWatchdogRunnable);
             cancelTunnelingProgressWatchdog();
             cancelDecoderRuntimeStableWindow();
-            logHdrDiagnostics("error");
             logPlaybackError(error);
         }
     };
@@ -275,7 +263,6 @@ public class ExoPlayerEngine implements PlayerEngine {
         cancelTunnelingWatchdog();
         cancelTunnelingProgressWatchdog();
         cancelDecoderRuntimeStableWindow();
-        stopHdrDiagnostics();
         finishDecoderRuntimeAttempt();
         PlaybackAnalyticsListener.finishSession(player.getCurrentPosition());
         dolbyVisionPlaybackState.reset();
@@ -467,107 +454,6 @@ public class ExoPlayerEngine implements PlayerEngine {
                 currentDecoderRuntimeEvidence(),
                 android.os.SystemClock.elapsedRealtime(),
                 System.currentTimeMillis());
-    }
-
-    // --- HDR10 playback diagnostics (greppable via `adb logcat -s TV-hdr-diag`) ---
-    // Additive only: never changes decode/render behavior. Used to localize the
-    // Huawei Smart Screen HDR10 stutter / frame-drop / A-V desync report before
-    // any playback-logic change is made.
-    private void startHdrDiagnostics() {
-        if (!hdrDiagEnabled()) return;
-        App.removeCallbacks(hdrDiagRunnable);
-        hdrDiagLastDropped = getDroppedFrames();
-        hdrDiagLastTickMs = android.os.SystemClock.elapsedRealtime();
-        logHdrDiagnostics("start");
-        App.post(hdrDiagRunnable, 3_000L);
-    }
-
-    private void stopHdrDiagnostics() {
-        App.removeCallbacks(hdrDiagRunnable);
-    }
-
-    private void tickHdrDiagnostics() {
-        if (player == null || !player.isPlaying()) return;
-        logHdrDiagnostics("tick");
-        App.post(hdrDiagRunnable, 3_000L);
-    }
-
-    private void logHdrDiagnostics(String phase) {
-        if (player == null || !hdrDiagEnabled()) return;
-        VideoPlaybackDetails v = getVideoPlaybackDetails();
-        Format vf = player.getVideoFormat();
-        ColorInfo ci = v.outputColorInfo();
-        long dropped = getDroppedFrames();
-        long now = android.os.SystemClock.elapsedRealtime();
-        long dtMs = now - hdrDiagLastTickMs;
-        long dd = dropped - hdrDiagLastDropped;
-        double dropRate = dtMs > 0 ? dd * 1000.0 / dtMs : 0;
-        hdrDiagLastDropped = dropped;
-        hdrDiagLastTickMs = now;
-        String decoder = v.decoderName();
-        boolean soft = isSoftDecoderName(decoder);
-        int effectCount = videoEffectsActive ? 1 : 0;
-        String hwSupport = "";
-        if ("start".equals(phase) && vf != null) {
-            try {
-                hwSupport = CodecCapabilityInspector.formatSupport(App.get(), vf);
-            } catch (Throwable ignored) {
-            }
-        }
-        String line = String.format(Locale.US,
-                "phase=%s pos=%dms decoder=%s soft=%s transfer=%s hdr10Fallback=%s dvP81=%s dropped=%d(+%d,%.1f/s) tunnel=[%s] effects=%d hwSupport=%s url=%s",
-                phase,
-                player.getCurrentPosition(),
-                decoder == null ? "" : decoder,
-                soft,
-                colorTransferName(ci),
-                v.dolbyVisionHdr10Fallback(),
-                v.dolbyVisionP81Conversion(),
-                dropped, dd, dropRate,
-                getRenderDiagnostics(),
-                effectCount,
-                hwSupport,
-                spec == null ? "" : safeUrlTail(spec.getUrl()));
-        SpiderDebug.log(HDR_DIAG_TAG, line);
-        android.util.Log.i(HDR_DIAG_TAG, line);
-    }
-
-    private static boolean hdrDiagEnabled() {
-        return BuildConfig.DEBUG || SpiderDebug.isEnabled();
-    }
-
-    private static boolean isSoftDecoderName(String name) {
-        if (name == null || name.isBlank()) return false;
-        String l = name.toLowerCase(Locale.US);
-        return l.contains("ffmpeg") || l.contains("google") || l.contains("android")
-                || l.contains("software") || l.contains("c2.android")
-                || l.startsWith("omx.google");
-    }
-
-    private static String colorTransferName(ColorInfo ci) {
-        if (ci == null) return "n/a";
-        switch (ci.colorTransfer) {
-            case C.COLOR_TRANSFER_ST2084:
-                return "HDR10/ST2084";
-            case C.COLOR_TRANSFER_HLG:
-                return "HLG";
-            case C.COLOR_TRANSFER_SDR:
-                return "SDR";
-            case C.COLOR_TRANSFER_LINEAR:
-                return "LINEAR";
-            case C.COLOR_TRANSFER_GAMMA_2_2:
-                return "GAMMA2.2";
-            case C.COLOR_TRANSFER_SRGB:
-                return "SRGB";
-            default:
-                return "tf=" + ci.colorTransfer;
-        }
-    }
-
-    private static String safeUrlTail(String url) {
-        if (url == null) return "";
-        int i = url.lastIndexOf('/');
-        return i >= 0 ? url.substring(i + 1) : url;
     }
 
     private void recordDecoderRuntimeFirstFrame() {
@@ -812,7 +698,6 @@ public class ExoPlayerEngine implements PlayerEngine {
         compressedAudioDirectPolicy.resetOutputProgress();
         preCache.stop("player-stop");
         cancelDecoderRuntimeStableWindow();
-        stopHdrDiagnostics();
         finishDecoderRuntimeAttempt();
         PlaybackAnalyticsListener.finishSession(player.getCurrentPosition());
         subtitleSession.reset();
@@ -921,7 +806,6 @@ public class ExoPlayerEngine implements PlayerEngine {
                     format == null ? "unknown" : format.width + "x" + format.height + "/" + format.sampleMimeType);
         }
         player.setVideoEffects(effects);
-        videoEffectsActive = effects != null && !effects.isEmpty();
         com.fongmi.android.tv.player.exo.ExoDiagnosticCollector.effects(player, effects);
     }
 
@@ -1305,7 +1189,6 @@ public class ExoPlayerEngine implements PlayerEngine {
         firstFrameRendered = false;
         cancelTunnelingProgressWatchdog();
         cancelDecoderRuntimeStableWindow();
-        stopHdrDiagnostics();
         armTunnelingWatchdog();
         finishDecoderRuntimeAttempt();
         dolbyVisionPlaybackState.resetAttempt();
