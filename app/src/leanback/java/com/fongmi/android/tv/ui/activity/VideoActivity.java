@@ -2163,8 +2163,8 @@ private boolean runtimeSourceOnly;
     }
 
     private void setVideoView() {
-        mBinding.control.action.danmaku.setVisibility(DanmakuSetting.isLoad() ? View.VISIBLE : View.GONE);
-        mBinding.control.action.adFeedback.setVisibility(isAdFeedbackEnabled() ? View.VISIBLE : View.GONE);
+        PlayerButtonSetting.apply(mBinding.control.action.danmaku, PlayerButtonSetting.DANMAKU, DanmakuSetting.isLoad());
+        PlayerButtonSetting.apply(mBinding.control.action.adFeedback, PlayerButtonSetting.AD_FEEDBACK, isAdFeedbackEnabled());
         applyDanmakuState();
         mBinding.control.action.reset.setText(ResUtil.getStringArray(R.array.select_reset)[Setting.getReset()]);
         setupActionButtons();
@@ -2254,7 +2254,7 @@ private boolean runtimeSourceOnly;
 
     private void applyActionButtonVisibility() {
         updateCustomButtonVisibility();
-        mBinding.control.action.cast.setVisibility(isFullscreen() ? View.GONE : View.VISIBLE);
+        PlayerButtonSetting.apply(mBinding.control.action.cast, PlayerButtonSetting.CAST, !isFullscreen());
         updateImmersiveAudioAction();
         updatePanDiagnosticAction();
         updateDiscMenuButton();
@@ -2263,7 +2263,7 @@ private boolean runtimeSourceOnly;
 
     private void updatePanDiagnosticAction() {
         if (mBinding == null) return;
-        mBinding.control.action.panDiagnostic.setVisibility(isFullscreen() && canRunPanDiagnostic() ? View.VISIBLE : View.GONE);
+        PlayerButtonSetting.apply(mBinding.control.action.panDiagnostic, PlayerButtonSetting.PAN_DIAGNOSTIC, isFullscreen() && canRunPanDiagnostic());
     }
 
     private void setPlayerButton() {
@@ -2297,7 +2297,7 @@ private boolean runtimeSourceOnly;
     private void updateImmersiveAudioAction() {
         if (mBinding == null) return;
         boolean audioContent = isAudioOnly() || isMusicLike();
-        mBinding.control.action.immersiveAudio.setVisibility(isFullscreen() && audioContent ? View.VISIBLE : View.GONE);
+        PlayerButtonSetting.apply(mBinding.control.action.immersiveAudio, PlayerButtonSetting.IMMERSIVE_AUDIO, isFullscreen() && audioContent);
         mBinding.control.action.immersiveAudio.setSelected(shouldUseImmersiveAudio());
     }
 
@@ -4068,7 +4068,7 @@ private boolean runtimeSourceOnly;
     }
 
     private void setEpisodeAdapter(List<Episode> items, boolean scrollToCurrent) {
-        mBinding.control.action.episodes.setVisibility(items.size() < 2 ? View.GONE : View.VISIBLE);
+        PlayerButtonSetting.apply(mBinding.control.action.episodes, PlayerButtonSetting.EPISODES, items.size() >= 2);
         applyActionButtonVisibility();
         setEpisodeAdapter(items, scrollToCurrent, true);
     }
@@ -4092,7 +4092,7 @@ private boolean runtimeSourceOnly;
         boolean showTmdbEpisodeChrome = EpisodeDisplayPolicy.shouldShowTmdbEpisodeChrome(tmdbMode, tmdbEpisodeEnrichmentPending, items);
         boolean useTmdbCards = EpisodeDisplayPolicy.shouldUseTmdbEpisodeCards(tmdbMode, items);
         mBinding.episodeContainer.setVisibility(isEmpty ? View.GONE : View.VISIBLE);
-        mBinding.control.action.episodes.setVisibility(items.size() < 2 ? View.GONE : View.VISIBLE);
+        PlayerButtonSetting.apply(mBinding.control.action.episodes, PlayerButtonSetting.EPISODES, items.size() >= 2);
         applyActionButtonVisibility();
 
         if (shouldUseUpstreamNativeEpisodeModule()) {
@@ -4284,7 +4284,7 @@ private boolean runtimeSourceOnly;
 
     private void setQualityVisible(boolean visible) {
         mBinding.quality.setVisibility(visible ? View.VISIBLE : View.GONE);
-        mBinding.control.action.actionQuality.setVisibility(visible ? View.VISIBLE : View.GONE);
+        PlayerButtonSetting.apply(mBinding.control.action.actionQuality, PlayerButtonSetting.QUALITY, visible);
         applyActionButtonVisibility();
         updateActionQuality(mViewModel.getPlayer().getValue());
         updateFocus();
@@ -4805,13 +4805,13 @@ private boolean runtimeSourceOnly;
     }
 
     /**
-     * 分段行中真正持有焦点的子项位置（按子视图下标），焦点不在分段行时返回 -1。
+     * 分段行中真正持有焦点的子项适配器位置，焦点不在分段行时返回 -1。
      */
     private int focusedArrayPosition() {
         View focus = getCurrentFocus();
         while (focus != null) {
             ViewParent parent = focus.getParent();
-            if (parent == mBinding.array) return mBinding.array.indexOfChild(focus);
+            if (parent == mBinding.array) return mBinding.array.getChildAdapterPosition(focus);
             focus = parent instanceof View ? (View) parent : null;
         }
         return -1;
@@ -4843,12 +4843,13 @@ private boolean runtimeSourceOnly;
     private void applyArrayFocus(int position) {
         mArrayAdapter.setSelectedPosition(position);
         mBinding.array.setSelectedPosition(position);
-        View child = mBinding.array.getChildAt(position);
-        if (child != null && child.requestFocus()) return;
+        RecyclerView.ViewHolder holder = mBinding.array.findViewHolderForAdapterPosition(position);
+        if (holder != null && holder.itemView.requestFocus()) return;
         mBinding.array.post(() -> {
             if (isFinishing() || isDestroyed()) return;
-            View next = mBinding.array.getChildAt(position);
-            if (next != null) next.requestFocus();
+            if (!isFocusInside(mBinding.array) || mBinding.array.getSelectedPosition() != position) return;
+            RecyclerView.ViewHolder next = mBinding.array.findViewHolderForAdapterPosition(position);
+            if (next != null) next.itemView.requestFocus();
         });
     }
 
@@ -5244,6 +5245,12 @@ private boolean runtimeSourceOnly;
 
     private void onKeep() {
         Keep keep = Keep.find(getHistoryKey());
+        // 详情回调（setDetail -> checkHistory）之前 mHistory 还是 null，此时新增收藏会拿空历史当对象用。
+        // 取消收藏只依赖 key，与详情是否就绪无关，因此只挡新增这一支。
+        if (keep == null && !isKeepReady()) {
+            Notify.show(R.string.keep_not_ready);
+            return;
+        }
         Notify.show(keep != null ? R.string.keep_del : R.string.keep_add);
         if (keep != null) keep.delete();
         else createKeep();
@@ -6521,7 +6528,15 @@ private boolean runtimeSourceOnly;
         mBinding.keep.setCompoundDrawablesWithIntrinsicBounds(Keep.find(getHistoryKey()) == null ? R.drawable.ic_detail_keep_off : R.drawable.ic_detail_keep_on, 0, 0, 0);
     }
 
+    /**
+     * 就绪 = 详情已给出历史，且站点仍可解析（接口刷新后站点可能消失，getSite() 会返回 null）。
+     */
+    private boolean isKeepReady() {
+        return mHistory != null && getSite() != null;
+    }
+
     private void createKeep() {
+        if (!isKeepReady()) return;
         Keep keep = new Keep();
         keep.setKey(getHistoryKey());
         keep.setCid(VodConfig.getCid());
@@ -8833,14 +8848,14 @@ private boolean runtimeSourceOnly;
     }
 
     private void setTrackVisible() {
-        mBinding.control.action.text.setVisibility(player().haveTrack(C.TRACK_TYPE_TEXT) || player().isVod() ? View.VISIBLE : View.GONE);
-        mBinding.control.action.audio.setVisibility(player().haveTrack(C.TRACK_TYPE_AUDIO) ? View.VISIBLE : View.GONE);
-        mBinding.control.action.video.setVisibility(player().haveTrack(C.TRACK_TYPE_VIDEO) ? View.VISIBLE : View.GONE);
+        PlayerButtonSetting.apply(mBinding.control.action.text, PlayerButtonSetting.TEXT, player().haveTrack(C.TRACK_TYPE_TEXT) || player().isVod());
+        PlayerButtonSetting.apply(mBinding.control.action.audio, PlayerButtonSetting.AUDIO, player().haveTrack(C.TRACK_TYPE_AUDIO));
+        PlayerButtonSetting.apply(mBinding.control.action.video, PlayerButtonSetting.VIDEO, player().haveTrack(C.TRACK_TYPE_VIDEO));
         applyActionButtonVisibility();
     }
 
     private void setTitleVisible() {
-        mBinding.control.action.title.setVisibility(player().haveTitle() ? View.VISIBLE : View.GONE);
+        PlayerButtonSetting.apply(mBinding.control.action.title, PlayerButtonSetting.TITLE, player().haveTitle());
         applyActionButtonVisibility();
     }
 
@@ -9031,7 +9046,7 @@ private boolean runtimeSourceOnly;
 
     private void setFullscreen(boolean fullscreen) {
         this.fullscreen = fullscreen;
-        mBinding.control.action.fullscreen.setVisibility(fullscreen ? View.GONE : View.VISIBLE);
+        PlayerButtonSetting.apply(mBinding.control.action.fullscreen, PlayerButtonSetting.FULLSCREEN, !fullscreen);
         mBinding.control.action.fullscreen.setText(R.string.play_fullscreen);
         applyActionButtonVisibility();
     }
