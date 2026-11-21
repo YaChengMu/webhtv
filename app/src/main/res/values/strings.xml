@@ -43,6 +43,8 @@
     <string name="keep">Keep</string>
     <string name="keep_add">Added</string>
     <string name="keep_del">Removed</string>
+    <!-- 详情还没回来时按收藏：不静默吞键，也不写入缺封面/片名的半条收藏。 -->
+    <string name="keep_not_ready">Details are still loading. Try again in a moment.</string>
     <!-- 收藏页空态：设计文档 §9.9 要求「标题 + 解释 + 一个主动作」。 -->
     <string name="keep_empty_title">Nothing saved yet</string>
     <string name="keep_empty_description">Press Keep on any detail page and it will show up here.</string>
@@ -1522,8 +1524,12 @@
     <string name="player_osd">On-screen display</string>
     <string name="player_subtitle_auto_match">Auto subtitle match</string>
     <string name="player_subtitle_language">Preferred subtitle language</string>
-    <string name="player_subtitle_source_environment">Environment variables (JSON)</string>
-    <string name="player_subtitle_source_environment_invalid">Enter a valid JSON object</string>
+    <string name="player_subtitle_source_environment">Source configuration (JSON)</string>
+    <string name="player_subtitle_source_environment_helper">Enter a JSON object, e.g. {\"TOKEN\":\"your API Key\"}. Use the field names specified by the source. Leave blank to clear the configuration.</string>
+    <string name="player_subtitle_source_environment_invalid">Enter a JSON object, e.g. {\"TOKEN\":\"your API Key\"}. Use double quotes around field names and text values.</string>
+    <string name="player_subtitle_source_assrt_key">assrt API Key</string>
+    <string name="player_subtitle_source_assrt_helper">Paste your assrt API Key directly; no JSON required. Leave blank to remove the API Key.</string>
+    <string name="player_subtitle_source_assrt_invalid">Paste the API Key directly, or use {\"ASSRT_TOKEN\":\"your API Key\"} for JSON.</string>
     <string name="player_subtitle_source">Subtitle sources</string>
     <string name="player_subtitle_source_count">%1$d loaded</string>
     <string name="player_subtitle_source_empty">No subtitle sources available</string>
